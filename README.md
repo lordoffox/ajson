@@ -25,6 +25,7 @@ char * data = ""
 "	\"Name\" : \"Boo\","
 "	\"Age\" : 28"
 "}";
+
 load_from_buff(obj,data);
 
 以上代码解释了什么是AJSON,AJSON还支持stl的顺序容器
@@ -42,11 +43,17 @@ AJSON还有什么比较酷的地方吗
 因为有时候有这样一种需求，一个C++的Type会有多种ORM方式，
 比如Person可以有(Name)(Age),(Name),(Age)这3种方式存到不同的json文件中。
 AJSON的本身是带有tag机制的
+
 AJSONX(Person , (Name)(Age),0)
+
 load_from_buffx<0>(obj,data);
+
 AJSONX(Person , (Name),1)
+
 load_from_buffx<1>(obj,data);
+
 AJSONX(Person , (Age),2)
+
 load_from_buffx<2>(obj,data);
 
 每个tag编号就是一组编制，这样你可以给你的系统分配多种ORM方案，
