@@ -560,33 +560,30 @@ namespace boost
 		}
 
 		template<int tag,typename ty , typename string_ty>
-		inline bool load_from_buffx(ty& value , const char * data , string_ty * error_message = 0)
+		inline bool load_from_buffx(ty& value , const char * data , string_ty& error_message)
 		{
 			::rapidjson::Document document;
 			document.Parse<0>(data);
 			if(document.HasParseError())
 			{
-				if(error_message)
+				char * error_offset = (char *)data + document.GetErrorOffset();
+				::std::size_t len = strlen(error_offset);
+				if (len > 50)
 				{
-					char * error_offset = data + document.GetErrorOffset();
-					int len = strlen(error_offset);
-					if (len > 50)
-					{
-						len = 50;
-					}
-					char error_str[256];
-					int offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
-					memcpy(error_str+offset,error_offset,len);
-					error_str[offset+len] = 0;
-					*error_message = error_str;
+					len = 50;
 				}
+				char error_str[256];
+				int offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+				memcpy(error_str+offset,error_offset,len);
+				error_str[offset+len] = 0;
+				error_message = error_str;
 				return false;
 			}
 			ajson_readx<tag>(document,value);
 		}
 
 		template<typename ty , typename string_ty>
-		inline bool load_from_buff(ty& value , const char * data , string_ty * error_message = 0)
+		inline bool load_from_buff(ty& value , const char * data , string_ty& error_message)
 		{
 			return load_from_buffx<0>(value,data,error_message);
 		}
@@ -609,32 +606,26 @@ namespace boost
 		}
 
 		template<int tag,typename ty , typename string_ty>
-		inline bool load_from_filex(ty& value , char * filename , string_ty * error_message)
+		inline bool load_from_filex(ty& value , char * filename , string_ty& error_message)
 		{
 			::rapidjson::Document document;
 			char readBuffer[65536];
 			FILE * fd;
 			if( 0 != ::fopen_s(&fd,filename,"r"))
 			{
-				if(error_message)
-				{
-					*error_message = "open file error.";
-				}
+				error_message = "open file error.";
 				return false;
 			}
 			::rapidjson::FileReadStream is(fd, readBuffer, sizeof(readBuffer));
 			document.ParseStream<0,::rapidjson::UTF8<>>(is);
 			if(document.HasParseError())
 			{
-				if(error_message)
-				{
-					char error_str[256];
-					std::size_t offset = ::sprintf_s(error_str,256,"error occurred %s near ",document.GetParseError());
-					fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
-					offset += fread(error_str+offset,1,50,fd);
-					error_str[offset] = 0;
-					*error_message = error_str;
-				}
+				char error_str[256];
+				::std::size_t offset = ::sprintf_s(error_str,256,"error occurred %s near ",document.GetParseError());
+				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
+				offset += fread(error_str+offset,1,50,fd);
+				error_str[offset] = 0;
+				error_message = error_str;
 				::fclose(fd);
 				return false;
 			}
@@ -644,17 +635,18 @@ namespace boost
 		}
 
 		template<typename ty , typename string_ty>
-		inline bool load_from_file(ty& value , char * filename ,string_ty * error_message)
+		inline bool load_from_file(ty& value , char * filename ,string_ty& error_message )
 		{
 			return load_from_filex<0>(value,filename,error_message);
 		}
 
-		template<int tag,typename ty>
-		inline bool save_to_filex(ty& value , const char * filename)
+		template<int tag,typename ty  , typename string_ty>
+		inline bool save_to_filex(ty& value , const char * filename ,string_ty& error_message)
 		{
 			FILE * fd;
 			if( 0 != ::fopen_s(&fd,filename,"w"))
 			{
+				error_message = "open file error.";
 				return false;
 			}
 			char writeBuffer[65536];
@@ -667,10 +659,10 @@ namespace boost
 			return true;
 		}
 
-		template<typename ty>
-		inline bool save_to_file(ty& value , const char * filename)
+		template<typename ty  , typename string_ty>
+		inline bool save_to_file(ty& value , const char * filename , string_ty& error_message)
 		{
-			return save_to_filex<0>(value,filename);
+			return save_to_filex<0>(value,filename,error_message);
 		}
 
 	}
