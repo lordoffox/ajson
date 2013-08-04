@@ -30,7 +30,7 @@
 
 namespace boost
 {
-  namespace ajson
+	namespace ajson
 	{
 		template <typename ty ,  int tag>
 		struct value_support_read_impl
@@ -559,22 +559,36 @@ namespace boost
 			return load_from_nodex<0>(value,node);
 		}
 
-		template<int tag,typename ty>
-		inline bool load_from_buffx(ty& value , const char * data)
+		template<int tag,typename ty , typename string_ty>
+		inline bool load_from_buffx(ty& value , const char * data , string_ty * error_message = 0)
 		{
 			::rapidjson::Document document;
 			document.Parse<0>(data);
 			if(document.HasParseError())
 			{
+				if(error_message)
+				{
+					char * error_offset = data + document.GetErrorOffset();
+					int len = strlen(error_offset);
+					if (len > 50)
+					{
+						len = 50;
+					}
+					char error_str[256];
+					int offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+					memcpy(error_str+offset,error_offset,len);
+					error_str[offset+len] = 0;
+					*error_message = error_str;
+				}
 				return false;
 			}
 			ajson_readx<tag>(document,value);
 		}
 
-		template<typename ty>
-		inline bool load_from_buff(ty& value , const char * data)
+		template<typename ty , typename string_ty>
+		inline bool load_from_buff(ty& value , const char * data , string_ty * error_message = 0)
 		{
-			return load_from_buffx<0>(value,data);
+			return load_from_buffx<0>(value,data,error_message);
 		}
 
 		template<int tag,typename ty , typename string_ty>
@@ -595,32 +609,44 @@ namespace boost
 		}
 
 		template<int tag,typename ty , typename string_ty>
-		inline bool load_from_filex(ty& value , char * filename , ::std::size_t& error_offset , string_ty& error_message)
+		inline bool load_from_filex(ty& value , char * filename , string_ty * error_message)
 		{
 			::rapidjson::Document document;
 			char readBuffer[65536];
 			FILE * fd;
 			if( 0 != ::fopen_s(&fd,filename,"r"))
 			{
+				if(error_message)
+				{
+					*error_message = "open file error.";
+				}
 				return false;
 			}
 			::rapidjson::FileReadStream is(fd, readBuffer, sizeof(readBuffer));
 			document.ParseStream<0,::rapidjson::UTF8<>>(is);
-			::fclose(fd);
 			if(document.HasParseError())
 			{
-				error_offset = document.GetErrorOffset();
-				error_message = document.GetParseError();
+				if(error_message)
+				{
+					char error_str[256];
+					std::size_t offset = ::sprintf_s(error_str,256,"error occurred %s near ",document.GetParseError());
+					fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
+					offset += fread(error_str+offset,1,50,fd);
+					error_str[offset] = 0;
+					*error_message = error_str;
+				}
+				::fclose(fd);
 				return false;
 			}
+			::fclose(fd);
 			ajson_readx<tag>(document,value);
 			return true;
 		}
 
 		template<typename ty , typename string_ty>
-		inline bool load_from_file(ty& value , char * filename , ::std::size_t& error_offset , string_ty& error_message)
+		inline bool load_from_file(ty& value , char * filename ,string_ty * error_message)
 		{
-			return load_from_filex<0>(value,filename,error_offset,error_message);
+			return load_from_filex<0>(value,filename,error_message);
 		}
 
 		template<int tag,typename ty>
@@ -635,7 +661,6 @@ namespace boost
 			::rapidjson::FileWriteStream os(fd, writeBuffer, sizeof(writeBuffer));
 			::rapidjson::PrettyWriter<::rapidjson::FileWriteStream > w(os);
 			::rapidjson::Document o;
-			o.SetObject();
 			ajson_writex<tag>(o,value,o.GetAllocator());
 			print_json(w,o);
 			::fclose(fd);
@@ -694,6 +719,7 @@ namespace boost\
 			typedef TYPE value_type;	\
 			static inline void write(::rapidjson::Value& json_value , const value_type& value , alloc_ty& alloc)\
 			{\
+				json_value.SetObject();\
 				::rapidjson::Value::Member * member_ptr;\
 				BOOST_PP_SEQ_FOR_EACH( AJSON_WRITE_MEMBER , X , MEMBERS ) \
 				return;\
