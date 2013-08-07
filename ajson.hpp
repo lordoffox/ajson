@@ -28,6 +28,18 @@
 #include <deque>
 #include <vector>
 
+#ifndef WIN32
+errno_t static inline fopen_s(FILE **f, const char *name, const char *mode) {
+	errno_t ret = 0;
+	assert(f);
+	*f = fopen(name, mode);
+	/* Can't be sure about 1-to-1 mapping of errno and MS' errno_t */
+	if (!*f)
+		ret = errno;
+	return ret;
+}
+#endif
+
 namespace boost
 {
 	namespace ajson
@@ -38,6 +50,7 @@ namespace boost
 			typedef ty value_type;
 			static void read( ::rapidjson::Value& json_value, value_type& value);
 		};
+
 		template <typename ty ,  int tag , typename alloc_ty>
 		struct value_support_write_impl
 		{
@@ -608,7 +621,11 @@ namespace boost
 					len = 50;
 				}
 				char error_str[256];
-				int offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+#ifdef WIN32
+				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+#else
+				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
+#endif
 				memcpy(error_str+offset,error_offset,len);
 				error_str[offset+len] = 0;
 				error_message = error_str;
@@ -644,7 +661,7 @@ namespace boost
 		inline bool load_from_filex(ty& value , char * filename , string_ty& error_message)
 		{
 			::rapidjson::Document document;
-			char readBuffer[65536];
+			char readBuffer[4096];
 			FILE * fd;
 			if( 0 != ::fopen_s(&fd,filename,"r"))
 			{
@@ -656,7 +673,11 @@ namespace boost
 			if(document.HasParseError())
 			{
 				char error_str[256];
-				::std::size_t offset = ::sprintf_s(error_str,256,"error occurred %s near ",document.GetParseError());
+#ifdef WIN32
+				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+#else
+				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
+#endif
 				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
 				offset += fread(error_str+offset,1,50,fd);
 				error_str[offset] = 0;
