@@ -210,10 +210,10 @@ namespace boost
 			}
 		};
 
-		template<typename char_traits_ty , typename char_alloc_type ,  int tag>
-		struct value_support_read_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
+		template<typename ty>
+		struct string_support_read_impl
 		{
-			typedef typename ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
+			typedef typename ty value_type;
 
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
@@ -273,60 +273,94 @@ namespace boost
 			}
 		};
 
-		template<typename char_traits_ty , typename char_alloc_type ,  int tag , typename alloc_ty>
-		struct value_support_write_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag , alloc_ty>
+		template<typename ty>
+		struct string_support_write_impl
 		{
-			typedef typename ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
+			typedef typename ty value_type;
 
-			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc)
+			static void write( ::rapidjson::Value& json_value,const value_type& value)
 			{
 				json_value.SetString(value.c_str());
 			}
 		};
 
-		template<typename ty,int tag>
-		inline void read_stl_seq_imp( ::rapidjson::Value& json_value, ty& value)
+		template<typename char_traits_ty , typename char_alloc_type ,  int tag>
+		struct value_support_read_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
 		{
-			if(json_value.IsArray())
-			{
-				::rapidjson::SizeType len = json_value.Size();
-				value.resize(len);
-				::rapidjson::SizeType i = 0;
-				for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
-				{
-					value_support_read<typename ty::value_type,tag>::read(json_value[i],*iter);
-				}
-			}
-			return ;
-		}
+			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
+			typedef typename string_support_read_impl<value_type> impl;
 
-		template<typename ty , int tag , typename alloc_ty>
-		inline void write_stl_seq_imp( ::rapidjson::Value& json_value, const ty& value , alloc_ty& alloc)
+			static void read( ::rapidjson::Value& json_value, value_type& value)
+			{
+				impl::read(json_value,value);
+			}
+		};
+
+		template<typename char_traits_ty , typename char_alloc_type ,  int tag , typename alloc_ty>
+		struct value_support_write_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag , alloc_ty>
 		{
-			if(!json_value.IsArray())
+			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
+			typedef typename string_support_write_impl<value_type> impl;
+
+			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc)
 			{
-				json_value.SetArray();
+				impl::write(json_value,value);
 			}
-			::std::size_t len = value.size();
-			json_value.Clear();
-			for (typename ty::const_iterator i = value.begin(); i != value.end();++i)
+		};
+
+		template<typename ty,int tag>
+		struct container_seq_support_read_impl
+		{
+			typedef ty value_type;
+
+			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
-				::rapidjson::Value evalue;
-				value_support_write<typename ty::value_type,tag,alloc_ty>::write(evalue,*i,alloc);
-				json_value.PushBack(evalue,alloc);
+				value.clear();
+				if(json_value.IsArray())
+				{
+					::rapidjson::SizeType len = json_value.Size();
+					value.resize(len);
+					::rapidjson::SizeType i = 0;
+					for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
+					{
+						value_support_read<typename ty::value_type,tag>::read(json_value[i],*iter);
+					}
+				}
+				return ;
 			}
-			return;
-		}
+		};
+
+		template<typename ty,int tag,typename json_alloc_ty>
+		struct container_seq_support_write_impl
+		{
+			typedef ty value_type;
+
+			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
+			{
+				if(!json_value.IsArray())
+				{
+					json_value.SetArray();
+				}
+				::std::size_t len = value.size();
+				json_value.Clear();
+				for (typename ty::const_iterator i = value.begin(); i != value.end();++i)
+				{
+					::rapidjson::Value evalue;
+					value_support_write<typename ty::value_type,tag,alloc_ty>::write(evalue,*i,alloc);
+					json_value.PushBack(evalue,alloc);
+				}
+				return;
+			}
+		};
 
 		template<typename ty,typename alloc_ty , int tag>
 		struct value_support_read_impl<::std::list<ty,alloc_ty> , tag>
 		{
 			typedef typename ::std::list<ty,alloc_ty> value_type;
-
+			typedef container_seq_support_read_impl<value_type,tag> impl;
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
-				value.clear();
-				read_stl_seq_imp<value_type,tag>(json_value,value);
+				impl::read(json_value,value);
 			}
 		};
 
@@ -334,10 +368,11 @@ namespace boost
 		struct value_support_write_impl<::std::list<ty,alloc_ty> , tag , json_alloc_ty>
 		{
 			typedef typename ::std::list<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
 
 			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
 			{
-				write_stl_seq_imp<value_type,tag,json_alloc_ty>(json_value,value,alloc);
+				impl::write(json_value,value,alloc);
 			}
 		};
 
@@ -345,11 +380,10 @@ namespace boost
 		struct value_support_read_impl<::std::deque<ty,alloc_ty> , tag>
 		{
 			typedef typename ::std::deque<ty,alloc_ty> value_type;
-
+			typedef container_seq_support_read_impl<value_type,tag> impl;
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
-				value.clear();
-				read_stl_seq_imp<value_type,tag>(json_value,value);
+				impl::read(json_value,value);
 			}
 		};
 
@@ -357,10 +391,11 @@ namespace boost
 		struct value_support_write_impl<::std::deque<ty,alloc_ty> , tag , json_alloc_ty>
 		{
 			typedef typename ::std::deque<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
 
 			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
 			{
-				write_stl_seq_imp<value_type,tag,json_alloc_ty>(json_value,value,alloc);
+				impl::write(json_value,value,alloc);
 			}
 		};
 
@@ -368,11 +403,10 @@ namespace boost
 		struct value_support_read_impl<::std::vector<ty,alloc_ty> , tag>
 		{
 			typedef typename ::std::vector<ty,alloc_ty> value_type;
-
+			typedef container_seq_support_read_impl<value_type,tag> impl;
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
-				value.clear();
-				read_stl_seq_imp<value_type,tag>(json_value,value);
+				impl::read(json_value,value);
 			}
 		};
 
@@ -380,10 +414,11 @@ namespace boost
 		struct value_support_write_impl<::std::vector<ty,alloc_ty> , tag , json_alloc_ty>
 		{
 			typedef typename ::std::vector<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
 
 			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
 			{
-				write_stl_seq_imp<value_type,tag,json_alloc_ty>(json_value,value,alloc);
+				impl::write(json_value,value,alloc);
 			}
 		};
 
