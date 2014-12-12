@@ -27,8 +27,11 @@
 #include <list>
 #include <deque>
 #include <vector>
+#include <map>
 
-#ifndef WIN32
+#ifndef _MSC_VER
+#include <errno.h>
+typedef int errno_t;
 errno_t static inline fopen_s(FILE **f, const char *name, const char *mode) {
 	errno_t ret = 0;
 	assert(f);
@@ -44,24 +47,180 @@ namespace boost
 {
 	namespace ajson
 	{
+		template <typename alloc_ty>
+		struct ajson_store_buffer
+		{
+		private:
+			alloc_ty alloc;
+		public:
+
+			enum { good , read_overflow };
+
+			char * m_header_ptr;
+			char * m_read_ptr;
+			char * m_write_ptr;
+			char * m_tail_ptr;
+			int							m_status;
+			std::size_t			m_length;
+
+			enum{INIT_AMSG_BUFF_SIZE=1024};
+			ajson_store_buffer():m_length(INIT_AMSG_BUFF_SIZE),m_status(good)
+			{
+				this->m_header_ptr = this->alloc.allocate(INIT_AMSG_BUFF_SIZE);
+				this->m_read_ptr = this->m_header_ptr;
+				this->m_write_ptr = this->m_header_ptr;
+				this->m_tail_ptr = this->m_header_ptr + m_length;
+			}
+
+			~ajson_store_buffer()
+			{
+				this->alloc.deallocate(m_header_ptr,this->m_length);
+			}
+
+			std::size_t read(char * buffer,std::size_t len)
+			{
+				if(this->m_read_ptr + len > this->m_tail_ptr)
+				{
+					m_status = read_overflow;
+					return 0;
+				}
+				memcpy(buffer,this->m_read_ptr,len);
+				this->m_read_ptr += len;
+				return len;
+			}
+
+			std::size_t growpup(std::size_t want_size)
+			{
+				std::size_t new_size = ((want_size+INIT_AMSG_BUFF_SIZE - 1) / INIT_AMSG_BUFF_SIZE)*INIT_AMSG_BUFF_SIZE;
+				std::size_t write_pos = this->m_write_ptr - this->m_header_ptr;
+				std::size_t read_pos = this->m_read_ptr - this->m_header_ptr;
+				char * temp = this->m_header_ptr;
+				this->m_header_ptr = this->alloc.allocate(new_size);
+				memcpy(this->m_header_ptr,temp,this->m_length);
+				this->alloc.deallocate(temp,this->m_length);
+				this->m_length = new_size;
+				this->m_write_ptr = this->m_header_ptr + write_pos;
+				this->m_read_ptr = this->m_header_ptr + read_pos;
+				this->m_tail_ptr = this->m_header_ptr + m_length;
+				return new_size;
+			}
+
+			std::size_t write(const char * buffer,std::size_t len)
+			{
+				std::size_t writed_len = this->m_write_ptr + len - this->m_header_ptr;
+				if(writed_len > this->m_length)
+				{
+					this->growpup(writed_len);
+				}
+				memcpy((void*)this->m_write_ptr,buffer,len);
+				this->m_write_ptr += len;
+				return len;
+			}
+
+			bool bad(){ return m_status != good; }
+
+			ajson_store_buffer& seekp(int offset , int seek_dir)
+			{
+				switch(seek_dir)
+				{
+				case std::ios::beg:
+					{
+						if(offset<0)
+						{
+							offset = 0;
+						}
+						this->m_write_ptr = this->m_header_ptr + offset;
+						break;
+					}
+				case std::ios::cur:
+					{
+						if(offset<0)
+						{
+							offset = offset + int(this->m_write_ptr - this->m_header_ptr);
+							if (offset < 0)
+							{
+								offset = 0;
+							}
+							this->m_write_ptr = this->m_header_ptr + offset;
+						}
+						else
+						{
+							if(this->m_write_ptr+offset > this->m_tail_ptr)
+							{
+								this->m_write_ptr = this->m_tail_ptr;
+							}
+						}
+						
+						break;
+					}
+				case std::ios::end:
+					{
+						if(offset<0)
+						{
+							offset = offset + int(this->m_write_ptr - this->m_header_ptr);
+							if (offset < 0)
+							{
+								offset = 0;
+							}
+							this->m_write_ptr = this->m_header_ptr + offset;
+						}
+						break;
+					}
+				}
+				return *this;
+			}
+
+			inline void clear()
+			{
+				this->m_read_ptr = this->m_header_ptr;
+				this->m_write_ptr = this->m_header_ptr;
+			}
+
+			inline const char * data() const
+			{
+				return this->m_header_ptr;
+			}
+
+			inline ::std::size_t read_length() const
+			{
+				return this->m_read_ptr - this->m_header_ptr;
+			}
+
+			inline ::std::size_t write_length() const
+			{
+				return this->m_write_ptr - this->m_header_ptr;
+			}
+		};
+
+		typedef ajson_store_buffer<std::allocator<char> > store_buffer;
+
 		template <typename ty ,  int tag>
 		struct value_support_read_impl
 		{
 			typedef ty value_type;
+			typedef value_support_read_impl<ty,tag> impl;
 			static void read( ::rapidjson::Value& json_value, value_type& value);
 		};
 
-		template <typename ty ,  int tag , typename alloc_ty>
+		template <typename ty ,  int tag >
 		struct value_support_write_impl
 		{
 			typedef ty value_type;
-			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc);
+			typedef value_support_write_impl<ty,tag> impl;
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value);
 		};
 		
+    template <typename ty ,  int tag>
+    struct value_support_read;
+
+    template <typename ty ,  int tag>
+    struct value_support_write;
+
 		template<typename ty>
 		struct integer_arithmetic_support_read_impl
 		{
-			typedef typename ty value_type;
+			typedef ty value_type;
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
 				if(json_value.IsNull())
@@ -72,43 +231,99 @@ namespace boost
 				if(json_value.IsBool())
 				{
 					bool jvalue = json_value.GetBool();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsInt())
 				{
 					int32_t jvalue = json_value.GetInt();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsUint())
 				{
 					uint32_t jvalue = json_value.GetUint();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsInt64())
 				{
 					int64_t jvalue = json_value.GetInt64();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsUint64())
 				{
 					uint64_t jvalue = json_value.GetUint64();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsDouble())
 				{
 					double jvalue = json_value.GetDouble();
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
 					return;
 				}
 				if(json_value.IsString())
 				{
 					int64_t jvalue = atol(json_value.GetString());
-					value = static_cast<ty>(jvalue);
+					value = (ty)(jvalue);
+					return;
+				}
+			}
+		};
+
+		template<>
+		struct integer_arithmetic_support_read_impl<bool>
+		{
+			typedef bool value_type;
+			static void read( ::rapidjson::Value& json_value, value_type& value)
+			{
+				if(json_value.IsNull())
+				{
+					value = 0;
+					return;
+				}
+				if(json_value.IsBool())
+				{
+					bool jvalue = json_value.GetBool();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsInt())
+				{
+					int32_t jvalue = json_value.GetInt();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsUint())
+				{
+					uint32_t jvalue = json_value.GetUint();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsInt64())
+				{
+					int64_t jvalue = json_value.GetInt64();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsUint64())
+				{
+					uint64_t jvalue = json_value.GetUint64();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsDouble())
+				{
+					double jvalue = json_value.GetDouble();
+					value = (jvalue!=0);
+					return;
+				}
+				if(json_value.IsString())
+				{
+					int64_t jvalue = atol(json_value.GetString());
+					value = (jvalue!=0);
 					return;
 				}
 			}
@@ -117,17 +332,62 @@ namespace boost
 		template<typename ty>
 		struct integer_arithmetic_support_write_impl
 		{
-			typedef typename ty value_type;
-			static void write( ::rapidjson::Value& json_value,const value_type& value)
+			typedef ty value_type;
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value)
 			{
-					json_value = value;
+				long long temp = (long long)value;
+				char buffer[64];
+				buffer[63] = 0;
+				size_t len = 64;
+				size_t pos = 62;
+				bool Sig = false;
+				if (temp <0)
+				{
+					Sig = true;
+					temp *= -1;
+				}
+				if(temp ==0)
+				{
+					buffer[pos--]='0';
+				}
+				while( temp )
+				{
+					buffer[pos--]	= (char)((temp%10)+'0');
+					temp = temp/10;
+				}
+				if(Sig)
+				{
+					buffer[pos--]='-';
+				}
+				++pos;
+				memmove( buffer,buffer+pos,(len-pos));
+				store_data.write(buffer,len - pos - 1);
+			}
+		};
+
+		template<>
+		struct integer_arithmetic_support_write_impl<bool>
+		{
+			typedef bool value_type;
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value)
+			{
+				if(value)
+				{
+					store_data.write("1",1);
+				}
+				else
+				{
+					store_data.write("0",1);
+				}
 			}
 		};
 
 		template<typename ty>
 		struct float_arithmetic_support_read_impl
 		{
-			typedef typename ty value_type;
+			typedef ty value_type;
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
 				if(json_value.IsNull())
@@ -183,50 +443,46 @@ namespace boost
 		template<typename ty>
 		struct float_arithmetic_support_write_impl
 		{
-			typedef typename ty value_type;
-			static void write( ::rapidjson::Value& json_value,const value_type& value)
+			typedef ty value_type;
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value)
 			{
-				json_value = value;
+				char buffer[64];
+#ifdef _WINDOWS_
+				_gcvt_s(buffer,64,value,60);
+#else
+				gcvt(value,64,buffer);
+#endif
+				store_data.write(buffer,strlen(buffer));
 			}
 		};
 
 		template <typename ty>
 		struct arithmetic_support_read_impl
 		{
-			typedef typename ty value_type;
+			typedef ty value_type;
 			typedef typename ::boost::mpl::if_<
 				::boost::is_integral<value_type>,
 				integer_arithmetic_support_read_impl<value_type>,
 				float_arithmetic_support_read_impl<value_type>
 			>::type impl;
-			
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
 		};
 
 		template <typename ty>
 		struct arithmetic_support_write_impl
 		{
-			typedef typename ty value_type;
+			typedef ty value_type;
 			typedef typename ::boost::mpl::if_<
 				::boost::is_integral<value_type>,
 				integer_arithmetic_support_write_impl<value_type>,
 				float_arithmetic_support_write_impl<value_type>
 			>::type impl;
-
-			template<typename alloc_ty>
-			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc)
-			{
-				impl::write(json_value,value);
-			}
 		};
 
-		template<typename ty>
+		template<typename ty,int tag>
 		struct string_support_read_impl
 		{
-			typedef typename ty value_type;
+			typedef ty value_type;
 
 			static void read( ::rapidjson::Value& json_value, value_type& value)
 			{
@@ -240,11 +496,11 @@ namespace boost
 					bool jvalue = json_value.GetBool();
 					if(jvalue)
 					{
-						value = "yes";
+						value = "1";
 					}
 					else
 					{
-						value = "no";
+						value = "0";
 					}
 					return;
 				}
@@ -286,39 +542,69 @@ namespace boost
 			}
 		};
 
-		template<typename ty>
+		template<typename ty,int tag>
 		struct string_support_write_impl
 		{
-			typedef typename ty value_type;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value)
+			typedef ty value_type;
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value)
 			{
-				json_value.SetString(value.c_str());
+				static const char hexDigits[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+				static const char escape[256] = {
+#define Z16 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+					//0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+					'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'b', 't', 'n', 'u', 'f', 'r', 'u', 'u', // 00
+					'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', // 10
+					0,   0, '"',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, // 20
+					Z16, Z16,																		// 30~4F
+					0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,'\\',   0,   0,   0, // 50
+					Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16								// 60~FF
+#undef Z16
+				};
+
+				store_data.write("\"",1);
+				std::size_t length = value.length();
+				const char * ptr = value.c_str();
+				const char * end = ptr + length; 
+				while (ptr < end) 
+				{
+					const char c = *ptr;
+					++ptr;
+					if (escape[(unsigned char)c])
+					{
+						store_data.write("\\",1);
+						store_data.write(&escape[(unsigned char)c],1);
+						if (escape[(unsigned char)c] == 'u') 
+						{
+							char buff[4] = {'0','x'};
+							buff[2] = (hexDigits[(unsigned char)c >> 4]);
+							buff[3] = (hexDigits[(unsigned char)c & 0xF]);
+							store_data.write(buff,4);
+						}
+					}
+					else
+					{
+						store_data.write(&c,1);
+					}
+				}
+				store_data.write("\"",1);
+
+				//store_data.write(value.c_str(),value.length());
 			}
 		};
 
 		template<typename char_traits_ty , typename char_alloc_type ,  int tag>
-		struct value_support_read_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
+		struct value_support_read_impl< ::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
 		{
 			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
-			typedef typename string_support_read_impl<value_type> impl;
-
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
+			typedef string_support_read_impl<value_type,tag> impl;
 		};
 
-		template<typename char_traits_ty , typename char_alloc_type ,  int tag , typename alloc_ty>
-		struct value_support_write_impl<::std::basic_string<char, char_traits_ty, char_alloc_type>, tag , alloc_ty>
+		template<typename char_traits_ty , typename char_alloc_type ,  int tag>
+		struct value_support_write_impl< ::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
 		{
 			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
-			typedef typename string_support_write_impl<value_type> impl;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc)
-			{
-				impl::write(json_value,value);
-			}
+			typedef string_support_write_impl<value_type,tag> impl;
 		};
 
 		template<typename ty,int tag>
@@ -334,107 +620,145 @@ namespace boost
 					::rapidjson::SizeType len = json_value.Size();
 					value.resize(len);
 					::rapidjson::SizeType i = 0;
-					for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
+					for (typename ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
 					{
-						value_support_read<typename ty::value_type,tag>::read(json_value[i],*iter);
+            value_support_read<typename ty::value_type,tag>::impl::read(json_value[i],*iter);
 					}
 				}
 				return ;
 			}
 		};
 
-		template<typename ty,int tag,typename json_alloc_ty>
+		template<typename ty,int tag>
 		struct container_seq_support_write_impl
 		{
 			typedef ty value_type;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
+			template<typename store_ty>
+			static void write( store_ty& store_data,const value_type& value)
 			{
-				if(!json_value.IsArray())
+				store_data.write("[",1);
+				std::size_t len = 0;
+				for (typename ty::const_iterator i = value.begin(); i != value.end();++i,++len)
 				{
-					json_value.SetArray();
+          value_support_write<typename value_type::value_type,tag>::impl::write(store_data , *i);
+					if(len < value.size() -1 )
+					{
+						store_data.write(",",1);
+					}
 				}
-				::std::size_t len = value.size();
-				json_value.Clear();
-				for (typename ty::const_iterator i = value.begin(); i != value.end();++i)
-				{
-					::rapidjson::Value evalue;
-					value_support_write<typename ty::value_type,tag,alloc_ty>::write(evalue,*i,alloc);
-					json_value.PushBack(evalue,alloc);
-				}
-				return;
+				store_data.write("]",1);
 			}
 		};
 
 		template<typename ty,typename alloc_ty , int tag>
-		struct value_support_read_impl<::std::list<ty,alloc_ty> , tag>
+		struct value_support_read_impl< ::std::list<ty,alloc_ty> , tag>
 		{
-			typedef typename ::std::list<ty,alloc_ty> value_type;
+			typedef ::std::list<ty,alloc_ty> value_type;
 			typedef container_seq_support_read_impl<value_type,tag> impl;
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
-		};
-
-		template<typename ty,typename alloc_ty , int tag , typename json_alloc_ty>
-		struct value_support_write_impl<::std::list<ty,alloc_ty> , tag , json_alloc_ty>
-		{
-			typedef typename ::std::list<ty,alloc_ty> value_type;
-			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
-			{
-				impl::write(json_value,value,alloc);
-			}
 		};
 
 		template<typename ty,typename alloc_ty , int tag>
-		struct value_support_read_impl<::std::deque<ty,alloc_ty> , tag>
+		struct value_support_write_impl< ::std::list<ty,alloc_ty> , tag>
 		{
-			typedef typename ::std::deque<ty,alloc_ty> value_type;
-			typedef container_seq_support_read_impl<value_type,tag> impl;
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
-		};
-
-		template<typename ty,typename alloc_ty , int tag , typename json_alloc_ty>
-		struct value_support_write_impl<::std::deque<ty,alloc_ty> , tag , json_alloc_ty>
-		{
-			typedef typename ::std::deque<ty,alloc_ty> value_type;
-			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
-			{
-				impl::write(json_value,value,alloc);
-			}
+			typedef ::std::list<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag> impl;
 		};
 
 		template<typename ty,typename alloc_ty , int tag>
-		struct value_support_read_impl<::std::vector<ty,alloc_ty> , tag>
+		struct value_support_read_impl< ::std::deque<ty,alloc_ty> , tag>
 		{
-			typedef typename ::std::vector<ty,alloc_ty> value_type;
+			typedef ::std::deque<ty,alloc_ty> value_type;
 			typedef container_seq_support_read_impl<value_type,tag> impl;
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
 		};
 
-		template<typename ty,typename alloc_ty , int tag , typename json_alloc_ty>
-		struct value_support_write_impl<::std::vector<ty,alloc_ty> , tag , json_alloc_ty>
+		template<typename ty,typename alloc_ty , int tag>
+		struct value_support_write_impl< ::std::deque<ty,alloc_ty> , tag>
 		{
-			typedef typename ::std::vector<ty,alloc_ty> value_type;
-			typedef container_seq_support_write_impl<value_type,tag,json_alloc_ty> impl;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , json_alloc_ty& alloc)
-			{
-				impl::write(json_value,value,alloc);
-			}
+			typedef ::std::deque<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag> impl;
 		};
 
+		template<typename ty,typename alloc_ty , int tag>
+		struct value_support_read_impl< ::std::vector<ty,alloc_ty> , tag>
+		{
+			typedef ::std::vector<ty,alloc_ty> value_type;
+			typedef container_seq_support_read_impl<value_type,tag> impl;
+		};
+
+		template<typename ty,typename alloc_ty , int tag>
+		struct value_support_write_impl< ::std::vector<ty,alloc_ty> , tag>
+		{
+			typedef ::std::vector<ty,alloc_ty> value_type;
+			typedef container_seq_support_write_impl<value_type,tag> impl;
+		};
+
+    template<typename ty,int tag>
+    struct container_unorder_support_read_impl
+    {
+      typedef ty value_type;
+
+      static void read( ::rapidjson::Value& json_value, value_type& value)
+      {
+        value.clear();
+        if(json_value.IsObject())
+        {
+          ::rapidjson::SizeType len = json_value.Size();
+          value.resize(len);
+          ::rapidjson::Value::Member * member_ptr;
+          for (const ::rapidjson::Value::Member * iter = json_value.MemberBegin(); iter != json_value.MemberEnd();++iter)
+          {
+            if(!iter->name.IsString())
+            {
+              continue;
+            }
+            typename value_type::first_type key;
+            value_support_read_impl<typename ty::first_type,tag>::read(iter->name,key);
+            typename value_type::second_type data;
+            value_support_read_impl<typename ty::second_type,tag>::read(iter->value,key);
+            value.insert(::std::make_pair(key,data));
+          }
+        }
+        return ;
+      }
+    };
+
+
+    template<typename ty,int tag>
+    struct container_unorder_support_write_impl
+    {
+      typedef ty value_type;
+      template<typename store_ty>
+      static void write( store_ty& store_data,const value_type& value)
+      {
+        store_data.write("[",1);
+        std::size_t len = 0;
+        for (typename ty::const_iterator i = value.begin(); i != value.end();++i,++len)
+        {
+          value_support_write_impl<typename value_type::first_type,tag>::write(store_data , i->first);
+          store_data.write(":",1);
+          value_support_write_impl<typename value_type::second_type,tag>::write(store_data , i->second);
+          if(len < value.size() -1 )
+          {
+            store_data.write(",",1);
+          }
+        }
+        store_data.write("]",1);
+      }
+    };
+
+    template<typename key_ty, typename ty,typename alloc_ty , int tag>
+    struct value_support_read_impl< ::std::map<key_ty,ty,alloc_ty> , tag>
+    {
+      typedef ::std::map<key_ty,ty,alloc_ty> value_type;
+      typedef container_unorder_support_read_impl<value_type,tag> impl;
+    };
+
+    template<typename key_ty, typename ty,typename alloc_ty , int tag>
+    struct value_support_write_impl< ::std::map<key_ty,ty,alloc_ty> , tag>
+    {
+      typedef ::std::map<key_ty,ty,alloc_ty> value_type;
+      typedef container_unorder_support_write_impl<value_type,tag> impl;
+    };
 
 		template <typename ty ,  int tag>
 		struct value_support_read
@@ -442,42 +766,32 @@ namespace boost
 			typedef typename ::boost::remove_const<ty>::type value_type;
 			typedef typename ::boost::mpl::if_<
 				::boost::is_arithmetic<value_type>,
-				arithmetic_support_read_impl< value_type>,
-				value_support_read_impl<value_type , tag>
+				typename arithmetic_support_read_impl< value_type>::impl,
+				typename value_support_read_impl<value_type , tag>::impl
 			>::type impl;
-
-			static void read( ::rapidjson::Value& json_value, value_type& value)
-			{
-				impl::read(json_value,value);
-			}
 		};
 
-		template <typename ty ,  int tag , typename alloc_ty>
+		template <typename ty ,  int tag>
 		struct value_support_write
 		{
 			typedef typename ::boost::remove_const<ty>::type value_type;
 			typedef typename ::boost::mpl::if_<
 				::boost::is_arithmetic<value_type>,
-				arithmetic_support_write_impl< value_type>,
-				value_support_write_impl<value_type , tag , alloc_ty>
+				typename arithmetic_support_write_impl< value_type>::impl,
+				typename value_support_write_impl<value_type , tag>::impl
 			>::type impl;
-
-			static void write( ::rapidjson::Value& json_value,const value_type& value , alloc_ty& alloc)
-			{
-				impl::write(json_value,value , alloc);
-			}
 		};
 
 		template<int tag , typename ty>
 		void ajson_readx( ::rapidjson::Value& json_value , ty& value)
 		{
-			value_support_read<ty,tag>::read(json_value,value);
+			value_support_read<ty,tag>::impl::read(json_value,value);
 		}
 
-		template<int tag , typename ty , typename alloc_ty>
-		void ajson_writex( ::rapidjson::Value& json_value , ty& value , alloc_ty& alloc)
+		template<int tag , typename ty , typename store_ty>
+		void ajson_writex( store_ty& store_data , ty& value)
 		{
-			value_support_write<ty,tag,alloc_ty>::write(json_value,value,alloc);
+			value_support_write<ty,tag>::impl::write(store_data,value);
 		}
 
 		template<typename ty>
@@ -486,119 +800,17 @@ namespace boost
 			ajson_readx<0>(json_value,value);
 		}
 
-		template<typename ty , typename alloc_ty>
-		void ajson_write( ::rapidjson::Value& json_value , ty& value , alloc_ty& alloc)
+		template<int tag , typename ty , typename store_ty>
+		void ajson_write( store_ty& store_data , ty& value)
 		{
-			ajson_writex<ty,0,alloc_ty>::write(json_value,value,alloc);
-		}
-
-		template <typename string_ty>
-		struct string_buff_writer{
-			typedef char Ch;
-
-			string_buff_writer(string_ty& str) : str_(str){}
-
-			void Put(char c) {str_.push_back(c) ; }
-
-			// Not implemented
-			char* PutBegin() { return 0; }
-			size_t PutEnd(char*) { return 0; }
-			void Flush(){}
-
-			string_ty& str_;
-		};
-
-		template <typename string_ty>
-		string_buff_writer<string_ty> make_string_buff_writer(string_ty& str)
-		{
-			return string_buff_writer<string_ty>(str);
-		}
-
-		template<class Writer>
-		void	print_json(Writer& jw_,const ::rapidjson::Value& o)
-		{
-			if(o.IsObject())
-			{
-				jw_.StartObject();
-				::rapidjson::SizeType count = 0;
-				for(::rapidjson::Value::ConstMemberIterator p = o.MemberBegin() ; p != o.MemberEnd() ; ++p,++count)
-				{
-					jw_.String(p->name.GetString());
-					print_json(jw_,p->value);
-				}
-				jw_.EndObject(count);
-				return;
-			}
-			if(o.IsArray())
-			{
-				jw_.StartArray();
-				::rapidjson::SizeType count = o.Size();
-				for(::rapidjson::SizeType i = 0 ; i < count ; ++i)
-				{
-					print_json(jw_,o[i]);
-				}
-				jw_.EndArray(count);    
-				return;
-			}
-			if(o.IsString())
-			{
-				jw_.String(o.GetString());
-				return;
-			}
-			if(o.IsBool())
-			{
-				jw_.Bool(o.GetBool());
-				return;
-			}
-			if(o.IsInt())
-			{
-				jw_.Int(o.GetInt());
-				return;
-			}
-			if(o.IsUint())
-			{
-				jw_.Uint(o.GetUint());
-				return;
-			}
-			if(o.IsInt64())
-			{
-				jw_.Int64(o.GetInt64());
-				return;
-			}
-			if(o.IsUint64())
-			{
-				jw_.Uint64(o.GetUint64());
-				return;
-			}
-			if(o.IsDouble())
-			{
-				jw_.Double(o.GetDouble());
-				return;
-			}
-			if(o.IsNull())
-			{
-				jw_.Null();
-				return;
-			}
-		}
-
-		template<int tag,typename ty , typename alloc_ty>
-		inline bool save_to_nodex(ty& value , ::rapidjson::Value& node , alloc_ty& alloc)
-		{
-			ajson_writex<tag>(node,value,alloc);
-			return true;
-		}
-
-		template<typename ty , typename alloc_ty>
-		inline bool save_to_node(ty& value , ::rapidjson::Value& node , alloc_ty& alloc)
-		{
-			return save_to_buffx<0>(value , node , alloc);
+			ajson_writex<0>(store_data,value);
 		}
 
 		template<int tag,typename ty>
 		inline bool load_from_nodex(ty& value , const ::rapidjson::Value& node)
 		{
 			ajson_readx<tag>(node,value);
+      return true;
 		}
 
 		template<typename ty>
@@ -621,7 +833,7 @@ namespace boost
 					len = 50;
 				}
 				char error_str[256];
-#ifdef WIN32
+#ifdef _MSC_VER
 				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
 #else
 				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
@@ -632,6 +844,7 @@ namespace boost
 				return false;
 			}
 			ajson_readx<tag>(document,value);
+			return true;
 		}
 
 		template<typename ty , typename string_ty>
@@ -640,21 +853,18 @@ namespace boost
 			return load_from_buffx<0>(value,data,error_message);
 		}
 
-		template<int tag,typename ty , typename string_ty>
-		inline bool save_to_buffx(ty& value , string_ty& buff)
+		template<int tag,typename ty , typename stroe_ty>
+		inline bool save_to_buffx(stroe_ty& buff,ty& value)
 		{
-			::rapidjson::PrettyWriter<string_buff_writer<string_ty> > w(make_string_buff_writer(buff));
-			::rapidjson::Document doc;
-			doc.SetObject();
-			ajson_writex<tag>(doc,value,doc.GetAllocator());
-			print_json(w,doc);
+			ajson_writex<tag>(buff,value);
+			buff.write("\0",1);
 			return true;
 		}
 
-		template<typename ty , typename string_ty>
-		inline bool save_to_buff(ty& value , string_ty& buff)
+		template<typename ty , typename stroe_ty>
+		inline bool save_to_buff(ty& value , stroe_ty& buff)
 		{
-			return save_to_buffx<0>(value , buff);
+			return save_to_buffx<0>(buff,value);
 		}
 
 		template<int tag,typename ty , typename string_ty>
@@ -669,17 +879,17 @@ namespace boost
 				return false;
 			}
 			::rapidjson::FileReadStream is(fd, readBuffer, sizeof(readBuffer));
-			document.ParseStream<0,::rapidjson::UTF8<>>(is);
+			document.ParseStream<0,::rapidjson::UTF8<> >(is);
 			if(document.HasParseError())
 			{
 				char error_str[256];
-#ifdef WIN32
+#ifdef _MSC_VER
 				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
 #else
 				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
 #endif
 				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
-				offset += fread(error_str+offset,1,50,fd);
+				offset += fread(error_str+offset,1,64,fd);
 				error_str[offset] = 0;
 				error_message = error_str;
 				::fclose(fd);
@@ -699,19 +909,11 @@ namespace boost
 		template<int tag,typename ty  , typename string_ty>
 		inline bool save_to_filex(ty& value , const char * filename ,string_ty& error_message)
 		{
-			FILE * fd;
-			if( 0 != ::fopen_s(&fd,filename,"w"))
+			std::ofstream outf(filename);
+			if(outf)
 			{
-				error_message = "open file error.";
-				return false;
+				ajson_writex<tag,ty,std::ofstream>(outf,value);
 			}
-			char writeBuffer[65536];
-			::rapidjson::FileWriteStream os(fd, writeBuffer, sizeof(writeBuffer));
-			::rapidjson::PrettyWriter<::rapidjson::FileWriteStream > w(os);
-			::rapidjson::Document o;
-			ajson_writex<tag>(o,value,o.GetAllocator());
-			print_json(w,o);
-			::fclose(fd);
 			return true;
 		}
 
@@ -733,17 +935,11 @@ namespace boost
 	
 
 #define AJSON_WRITE_MEMBER( r ,v , elem ) \
-	member_ptr = json_value.FindMember( BOOST_DO_STRINGIZE(elem) );\
-	if ( member_ptr )\
-	{\
-		::boost::ajson::ajson_writex< v >( member_ptr->value , value.elem , alloc);\
-	}\
-	else\
-	{\
-		::rapidjson::Value mvalue;\
-		::boost::ajson::ajson_writex< v >( mvalue , value.elem , alloc);\
-		json_value.AddMember( BOOST_DO_STRINGIZE(elem) , mvalue , alloc);\
-	}
+	member_name = BOOST_DO_STRINGIZE(elem);\
+	store_data.write("\"",1); store_data.write(member_name,strlen(member_name));store_data.write("\"",1);store_data.write(":",1);\
+	::boost::ajson::ajson_writex< v >(store_data , value.elem);\
+	store_data.write(",",1);\
+	++member_count;
 
 #define AJSONX(TYPE, MEMBERS,X)\
 namespace boost\
@@ -754,6 +950,7 @@ namespace boost\
 		struct value_support_read_impl<TYPE,X>\
 		{\
 			typedef TYPE value_type;	\
+			typedef value_support_read_impl<TYPE,X> impl;\
 			static inline void read(::rapidjson::Value& json_value , value_type& value)\
 			{\
 				::rapidjson::Value::Member * member_ptr;\
@@ -761,15 +958,20 @@ namespace boost\
 				return;\
 			}\
 		};\
-		template <typename alloc_ty>\
-		struct value_support_write_impl<TYPE,X,alloc_ty>\
+		template <>\
+		struct value_support_write_impl<TYPE,X>\
 		{\
 			typedef TYPE value_type;	\
-			static inline void write(::rapidjson::Value& json_value , const value_type& value , alloc_ty& alloc)\
+			typedef value_support_write_impl<TYPE,X> impl;\
+			template<typename store_ty>\
+			static inline void write(store_ty& store_data , const value_type& value)\
 			{\
-				json_value.SetObject();\
-				::rapidjson::Value::Member * member_ptr;\
+				char * member_name = NULL;\
+				int member_count = 0;\
+				store_data.write("{",1);\
 				BOOST_PP_SEQ_FOR_EACH( AJSON_WRITE_MEMBER , X , MEMBERS ) \
+				if(member_count){ store_data.seekp(-1,std::ios::cur); }\
+				store_data.write("}",1);\
 				return;\
 			}\
 		};\
