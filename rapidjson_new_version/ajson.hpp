@@ -44,7 +44,153 @@ namespace boost
 {
 	namespace ajson
 	{
-    template <typename ty, typename jsonvalue_type, int tag>
+		template <typename alloc_ty>
+		struct ajson_store_buffer
+		{
+		private:
+			alloc_ty alloc;
+		public:
+
+			enum { good , read_overflow };
+
+			char * m_header_ptr;
+			char * m_read_ptr;
+			char * m_write_ptr;
+			char * m_tail_ptr;
+			int							m_status;
+			std::size_t			m_length;
+
+			enum{INIT_AMSG_BUFF_SIZE=1024};
+			ajson_store_buffer():m_length(INIT_AMSG_BUFF_SIZE),m_status(good)
+			{
+				this->m_header_ptr = this->alloc.allocate(INIT_AMSG_BUFF_SIZE);
+				this->m_read_ptr = this->m_header_ptr;
+				this->m_write_ptr = this->m_header_ptr;
+				this->m_tail_ptr = this->m_header_ptr + m_length;
+			}
+
+			~ajson_store_buffer()
+			{
+				this->alloc.deallocate(m_header_ptr,this->m_length);
+			}
+
+			std::size_t read(char * buffer,std::size_t len)
+			{
+				if(this->m_read_ptr + len > this->m_tail_ptr)
+				{
+					m_status = read_overflow;
+					return 0;
+				}
+				memcpy(buffer,this->m_read_ptr,len);
+				this->m_read_ptr += len;
+				return len;
+			}
+
+			std::size_t growpup(std::size_t want_size)
+			{
+				std::size_t new_size = ((want_size+INIT_AMSG_BUFF_SIZE - 1) / INIT_AMSG_BUFF_SIZE)*INIT_AMSG_BUFF_SIZE;
+				std::size_t write_pos = this->m_write_ptr - this->m_header_ptr;
+				std::size_t read_pos = this->m_read_ptr - this->m_header_ptr;
+				char * temp = this->m_header_ptr;
+				this->m_header_ptr = this->alloc.allocate(new_size);
+				memcpy(this->m_header_ptr,temp,this->m_length);
+				this->alloc.deallocate(temp,this->m_length);
+				this->m_length = new_size;
+				this->m_write_ptr = this->m_header_ptr + write_pos;
+				this->m_read_ptr = this->m_header_ptr + read_pos;
+				this->m_tail_ptr = this->m_header_ptr + m_length;
+				return new_size;
+			}
+
+			std::size_t write(const char * buffer,std::size_t len)
+			{
+				std::size_t writed_len = this->m_write_ptr + len - this->m_header_ptr;
+				if(writed_len > this->m_length)
+				{
+					this->growpup(writed_len);
+				}
+				memcpy((void*)this->m_write_ptr,buffer,len);
+				this->m_write_ptr += len;
+				return len;
+			}
+
+			bool bad(){ return m_status != good; }
+
+			ajson_store_buffer& seekp(int offset , int seek_dir)
+			{
+				switch(seek_dir)
+				{
+				case std::ios::beg:
+					{
+						if(offset<0)
+						{
+							offset = 0;
+						}
+						this->m_write_ptr = this->m_header_ptr + offset;
+						break;
+					}
+				case std::ios::cur:
+					{
+						if(offset<0)
+						{
+							offset = offset + int(this->m_write_ptr - this->m_header_ptr);
+							if (offset < 0)
+							{
+								offset = 0;
+							}
+							this->m_write_ptr = this->m_header_ptr + offset;
+						}
+						else
+						{
+							if(this->m_write_ptr+offset > this->m_tail_ptr)
+							{
+								this->m_write_ptr = this->m_tail_ptr;
+							}
+						}
+						
+						break;
+					}
+				case std::ios::end:
+					{
+						if(offset<0)
+						{
+							offset = offset + int(this->m_write_ptr - this->m_header_ptr);
+							if (offset < 0)
+							{
+								offset = 0;
+							}
+							this->m_write_ptr = this->m_header_ptr + offset;
+						}
+						break;
+					}
+				}
+				return *this;
+			}
+
+			inline void clear()
+			{
+				this->m_read_ptr = this->m_header_ptr;
+				this->m_write_ptr = this->m_header_ptr;
+			}
+
+			inline const char * data() const
+			{
+				return this->m_header_ptr;
+			}
+
+			inline ::std::size_t read_length() const
+			{
+				return this->m_read_ptr - this->m_header_ptr;
+			}
+
+			inline ::std::size_t write_length() const
+			{
+				return this->m_write_ptr - this->m_header_ptr;
+			}
+		};
+
+		typedef ajson_store_buffer<std::allocator<char> > store_buffer;
+		template <typename ty, typename jsonvalue_type, int tag>
 		struct value_support_read_impl
 		{
 			typedef ty value_type;
