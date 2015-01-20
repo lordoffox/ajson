@@ -16,7 +16,7 @@ AJSON(demo,(hello)(world))
 
 int main(int argc, char * argv[])
 {
-	char * buff = "{\"hello\" : \"Hello\", \"world\" : \"world.\"}";
+	const char * buff = "{\"hello\" : \"Hello\", \"world\" : \"world.\"}";
 	demo the_demo;
 	string error_msg;
 	load_from_buff(the_demo,buff,error_msg);
