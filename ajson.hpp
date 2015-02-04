@@ -838,7 +838,9 @@ namespace boost
 		template<int tag,typename ty  , typename string_ty>
 		inline bool save_to_filex(ty& value , const char * filename ,string_ty& error_message)
 		{
+			std::locale oldLoc = std::locale::global(std::locale(""));
 			std::ofstream outf(filename);
+			std::locale::global(std::locale(oldLoc));
 			if (outf)
 			{
 				ajson_writex<tag, ty, std::ofstream>(outf, value);
