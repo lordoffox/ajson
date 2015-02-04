@@ -879,6 +879,7 @@ namespace boost\
 		struct value_support_read_impl<TYPE,jsonvalue_type,X>\
 		{\
 			typedef TYPE value_type;	\
+			typedef value_support_read_impl<TYPE,jsonvalue_type,X> impl;\
 			static inline void read(const jsonvalue_type& json_value , value_type& value)\
 			{\
 				jsonvalue_type::ConstMemberIterator member_ptr;\
