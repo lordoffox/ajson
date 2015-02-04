@@ -28,6 +28,8 @@
 #include <deque>
 #include <vector>
 
+#include <stdio.h>
+
 #ifndef _MSC_VER
 errno_t static inline fopen_s(FILE **f, const char *name, const char *mode) {
 	errno_t ret = 0;
@@ -191,6 +193,75 @@ namespace boost
 
 		typedef ajson_store_buffer<std::allocator<char> > store_buffer;
 
+		struct ajson_file_stream
+		{
+		public:
+
+			enum { good , read_overflow , file_error };
+
+			FILE * m_f;
+			int		 m_status;
+			enum{INIT_AMSG_BUFF_SIZE=1024};
+			ajson_file_stream(const char * filename):m_f(NULL),m_status(good)
+			{
+				fopen_s(&this->m_f,filename,"w");
+				if(NULL ==this->m_f)
+				{
+					this->m_status = file_error;
+				}
+			}
+
+			~ajson_file_stream()
+			{
+				if(this->m_f)
+				{
+					fclose(m_f);
+				}
+			}
+
+			std::size_t read(char * buffer,std::size_t len)
+			{
+				std::size_t rlen = fread(buffer,len,1,this->m_f);
+				return rlen;
+			}
+
+			std::size_t write(const char * buffer,std::size_t len)
+			{
+				std::size_t wlen = fwrite(buffer,len,1,this->m_f);
+				return wlen;
+			}
+
+			bool bad(){ return m_status != good; }
+
+			int seekp(int offset , int seek_dir)
+			{
+				switch(seek_dir)
+				{
+				case std::ios::beg:
+					{
+						if(offset<0)
+						{
+							offset = 0;
+						}
+						return fseek(this->m_f,offset,SEEK_SET);
+					}
+				case std::ios::cur:
+					{
+						return fseek(this->m_f,offset,SEEK_CUR);
+					}
+				case std::ios::end:
+					{
+						return fseek(this->m_f,offset,SEEK_END);
+					}
+				}
+				return 0;
+			}
+
+			inline void clear()
+			{
+				fseek(this->m_f,0,SEEK_SET);
+			}
+		};
 		template <typename ty, typename jsonvalue_type, int tag>
 		struct value_support_read_impl
 		{
@@ -838,12 +909,10 @@ namespace boost
 		template<int tag,typename ty  , typename string_ty>
 		inline bool save_to_filex(ty& value , const char * filename ,string_ty& error_message)
 		{
-			std::locale oldLoc = std::locale::global(std::locale(""));
-			std::ofstream outf(filename);
-			std::locale::global(std::locale(oldLoc));
-			if (outf)
+			ajson_file_stream outf(filename);
+			if (!outf.bad())
 			{
-				ajson_writex<tag, ty, std::ofstream>(outf, value);
+				ajson_writex<tag, ty, ajson_file_stream>(outf, value);
 			}
 			return true;
 		}
