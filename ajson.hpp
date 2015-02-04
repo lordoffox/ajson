@@ -219,21 +219,21 @@ namespace boost
 				}
 			}
 
-			std::size_t read(char * buffer,std::size_t len)
+			inline std::size_t read(char * buffer,std::size_t len)
 			{
 				std::size_t rlen = fread(buffer,len,1,this->m_f);
 				return rlen;
 			}
 
-			std::size_t write(const char * buffer,std::size_t len)
+			inline std::size_t write(const char * buffer,std::size_t len)
 			{
 				std::size_t wlen = fwrite(buffer,len,1,this->m_f);
 				return wlen;
 			}
 
-			bool bad(){ return m_status != good; }
+			inline bool bad(){ return m_status != good; }
 
-			int seekp(int offset , int seek_dir)
+			inline int seekp(int offset , int seek_dir)
 			{
 				switch(seek_dir)
 				{
