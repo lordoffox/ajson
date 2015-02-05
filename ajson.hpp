@@ -6,11 +6,7 @@
 #ifndef AJSON_HPP_DFGDFG39328429
 #define AJSON_HPP_DFGDFG39328429
 
-#include <rapidjson/document.h>
-#include <rapidjson/prettywriter.h>
-#include <rapidjson/filereadstream.h>
-#include <rapidjson/filewritestream.h>
-#include <rapidjson/stringbuffer.h>
+#include "rapidjson/document.h"
 
 #include <boost/cstdint.hpp>
 #include <boost/static_assert.hpp>
@@ -913,6 +909,11 @@ namespace boost
 			if (!outf.bad())
 			{
 				ajson_writex<tag, ty, ajson_file_stream>(outf, value);
+			}
+			else
+			{
+				error_message = "error open file";
+				return false;
 			}
 			return true;
 		}
