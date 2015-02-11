@@ -7,6 +7,7 @@
 #define AJSON_HPP_DFGDFG39328429
 
 #include "rapidjson/document.h"
+#include "rapidjson/filereadstream.h"
 
 #include <boost/cstdint.hpp>
 #include <boost/static_assert.hpp>
@@ -684,7 +685,7 @@ namespace boost
 					::rapidjson::SizeType i = 0;
 					for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
 					{
-						value_support_read<typename ty::value_type,tag>::read(json_value[i],*iter);
+						value_support_read<typename ty::value_type,tag>::impl::read(json_value[i],*iter);
 					}
 				}
 				return ;
