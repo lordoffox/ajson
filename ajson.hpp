@@ -687,7 +687,7 @@ namespace boost
 					::rapidjson::SizeType i = 0;
 					for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
 					{
-						value_support_read<typename ty::value_type,tag>::impl::read(json_value[i],*iter);
+						value_support_read<typename ty::value_type,jsonvalue_type,tag>::impl::read(json_value[i],*iter);
 					}
 				}
 				return ;
