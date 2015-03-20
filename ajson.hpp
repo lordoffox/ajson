@@ -882,9 +882,9 @@ namespace boost
 			{
 				char error_str[256];
 #ifdef _MSC_VER
-        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError), res.Offset());
+        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError));
 #else
-        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError), res.Offset());
+        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError));
 #endif
 				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
 				offset += fread(error_str+offset,1,50,fd);
