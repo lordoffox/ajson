@@ -6,6 +6,8 @@
 #ifndef AJSON_HPP_DFGDFG39328429
 #define AJSON_HPP_DFGDFG39328429
 
+#include "rapidjson/rapidjson.h"
+#include "rapidjson/error/en.h"
 #include "rapidjson/document.h"
 #include "rapidjson/filereadstream.h"
 
@@ -818,7 +820,7 @@ namespace boost
 		inline bool load_from_buffx(ty& value , const char * data , string_ty& error_message)
 		{
 			::rapidjson::Document document;
-			document.Parse<0>(data);
+      document.Parse<0>(data);
 			if(document.HasParseError())
 			{
 				char * error_offset = (char *)data + document.GetErrorOffset();
@@ -829,9 +831,9 @@ namespace boost
 				}
 				char error_str[256];
 #ifdef _MSC_VER
-				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
 #else
-				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
+        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError));
 #endif
 				memcpy(error_str+offset,error_offset,len);
 				error_str[offset+len] = 0;
@@ -875,14 +877,14 @@ namespace boost
 				return false;
 			}
 			::rapidjson::FileReadStream is(fd, readBuffer, sizeof(readBuffer));
-			document.ParseStream<0,::rapidjson::UTF8<>>(is);
+      document.ParseStream<0, ::rapidjson::UTF8<>>(is);
 			if(document.HasParseError())
 			{
 				char error_str[256];
 #ifdef _MSC_VER
-				::std::size_t offset = ::sprintf_s(error_str,"error occurred %s near ",document.GetParseError());
+        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError), res.Offset());
 #else
-				::std::size_t offset = ::sprintf(error_str,"error occurred %s near ",document.GetParseError());
+        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError), res.Offset());
 #endif
 				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
 				offset += fread(error_str+offset,1,50,fd);
