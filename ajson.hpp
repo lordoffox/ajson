@@ -833,7 +833,7 @@ namespace boost
 #ifdef _MSC_VER
         ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
 #else
-        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError));
+        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
 #endif
 				memcpy(error_str+offset,error_offset,len);
 				error_str[offset+len] = 0;
@@ -882,9 +882,9 @@ namespace boost
 			{
 				char error_str[256];
 #ifdef _MSC_VER
-        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError));
+        ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
 #else
-        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError));
+        ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError()));
 #endif
 				fseek(fd,(int)document.GetErrorOffset(),SEEK_SET);
 				offset += fread(error_str+offset,1,50,fd);
