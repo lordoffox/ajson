@@ -10,6 +10,7 @@
 #include "rapidjson/error/en.h"
 #include "rapidjson/document.h"
 #include "rapidjson/filereadstream.h"
+#include "rapidjson/internal/dtoa.h"
 
 #include <boost/cstdint.hpp>
 #include <boost/static_assert.hpp>
@@ -441,12 +442,9 @@ namespace boost
 			static void write(store_ty& store_data, const value_type& value)
 			{
 				char buffer[64] = { 0 };
-#ifdef _MSC_VER
-				_gcvt_s(buffer, 63, value, 8);
-#else
-				gcvt(value, 63, buffer);
-#endif
-				store_data.write(buffer, strlen(buffer));
+        char * start = buffer;
+        char* end = rapidjson::internal::dtoa(value, buffer);
+				store_data.write(buffer, end - start);
 			}
 		};
 
