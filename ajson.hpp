@@ -660,14 +660,14 @@ namespace boost
     struct value_support_read_impl< ::std::basic_string<char, char_traits_ty, char_alloc_type>, jsonvalue_type , tag>
 		{
 			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
-      typedef typename string_support_read_impl<value_type, jsonvalue_type> impl;
+			typedef typename string_support_read_impl<value_type, jsonvalue_type> impl;
 		};
 
     template<typename char_traits_ty, typename char_alloc_type, int tag>
     struct value_support_write_impl< ::std::basic_string<char, char_traits_ty, char_alloc_type>, tag>
 		{
 			typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
-      typedef typename string_support_write_impl<value_type> impl;
+			typedef typename string_support_write_impl<value_type> impl;
 		};
 
     template<typename ty, typename jsonvalue_type, int tag>
@@ -685,7 +685,7 @@ namespace boost
 					::rapidjson::SizeType i = 0;
 					for (ty::iterator iter = value.begin(); iter != value.end();++iter,++i)
 					{
-						value_support_read<typename ty::value_type,tag>::impl::read(json_value[i],*iter);
+            value_support_read<typename ty::value_type, jsonvalue_type , tag>::impl::read(json_value[i], *iter);
 					}
 				}
 				return ;
