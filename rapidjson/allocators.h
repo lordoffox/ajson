@@ -68,7 +68,14 @@ public:
         else
             return NULL; // standardize to returning NULL.
     }
-    void* Realloc(void* originalPtr, size_t originalSize, size_t newSize) { (void)originalSize; return std::realloc(originalPtr, newSize); }
+    void* Realloc(void* originalPtr, size_t originalSize, size_t newSize) {
+        (void)originalSize;
+        if (newSize == 0) {
+            std::free(originalPtr);
+            return NULL;
+        }
+        return std::realloc(originalPtr, newSize);
+    }
     static void Free(void *ptr) { std::free(ptr); }
 };
 
@@ -136,11 +143,13 @@ public:
 
     //! Deallocates all memory chunks, excluding the user-supplied buffer.
     void Clear() {
-        while(chunkHead_ != 0 && chunkHead_ != userBuffer_) {
+        while (chunkHead_ && chunkHead_ != userBuffer_) {
             ChunkHeader* next = chunkHead_->next;
             baseAllocator_->Free(chunkHead_);
             chunkHead_ = next;
         }
+        if (chunkHead_ && chunkHead_ == userBuffer_)
+            chunkHead_->size = 0; // Clear user buffer
     }
 
     //! Computes the total capacity of allocated memory chunks.
@@ -172,7 +181,7 @@ public:
         if (chunkHead_ == 0 || chunkHead_->size + size > chunkHead_->capacity)
             AddChunk(chunk_capacity_ > size ? chunk_capacity_ : size);
 
-        void *buffer = reinterpret_cast<char *>(chunkHead_ + 1) + chunkHead_->size;
+        void *buffer = reinterpret_cast<char *>(chunkHead_) + RAPIDJSON_ALIGN(sizeof(ChunkHeader)) + chunkHead_->size;
         chunkHead_->size += size;
         return buffer;
     }
@@ -182,12 +191,15 @@ public:
         if (originalPtr == 0)
             return Malloc(newSize);
 
+        if (newSize == 0)
+            return NULL;
+
         // Do not shrink if new size is smaller than original
         if (originalSize >= newSize)
             return originalPtr;
 
         // Simply expand it if it is the last allocation and there is sufficient space
-        if (originalPtr == (char *)(chunkHead_ + 1) + chunkHead_->size - originalSize) {
+        if (originalPtr == (char *)(chunkHead_) + RAPIDJSON_ALIGN(sizeof(ChunkHeader)) + chunkHead_->size - originalSize) {
             size_t increment = static_cast<size_t>(newSize - originalSize);
             increment = RAPIDJSON_ALIGN(increment);
             if (chunkHead_->size + increment <= chunkHead_->capacity) {
@@ -219,7 +231,7 @@ private:
     void AddChunk(size_t capacity) {
         if (!baseAllocator_)
             ownBaseAllocator_ = baseAllocator_ = RAPIDJSON_NEW(BaseAllocator());
-        ChunkHeader* chunk = reinterpret_cast<ChunkHeader*>(baseAllocator_->Malloc(sizeof(ChunkHeader) + capacity));
+        ChunkHeader* chunk = reinterpret_cast<ChunkHeader*>(baseAllocator_->Malloc(RAPIDJSON_ALIGN(sizeof(ChunkHeader)) + capacity));
         chunk->capacity = capacity;
         chunk->size = 0;
         chunk->next = chunkHead_;

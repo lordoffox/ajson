@@ -69,7 +69,7 @@
 */
 #define RAPIDJSON_MAJOR_VERSION 1
 #define RAPIDJSON_MINOR_VERSION 0
-#define RAPIDJSON_PATCH_VERSION 0
+#define RAPIDJSON_PATCH_VERSION 2
 #define RAPIDJSON_VERSION_STRING \
     RAPIDJSON_STRINGIFY(RAPIDJSON_MAJOR_VERSION.RAPIDJSON_MINOR_VERSION.RAPIDJSON_PATCH_VERSION)
 
@@ -223,7 +223,7 @@
 
 //! Whether using 64-bit architecture
 #ifndef RAPIDJSON_64BIT
-#if defined(__LP64__) || defined(_WIN64)
+#if defined(__LP64__) || defined(_WIN64) || defined(__EMSCRIPTEN__)
 #define RAPIDJSON_64BIT 1
 #else
 #define RAPIDJSON_64BIT 0
@@ -241,7 +241,11 @@
     alignment. User can customize by defining the RAPIDJSON_ALIGN function macro.,
 */
 #ifndef RAPIDJSON_ALIGN
+#if RAPIDJSON_64BIT == 1
+#define RAPIDJSON_ALIGN(x) ((x + 7u) & ~7u)
+#else
 #define RAPIDJSON_ALIGN(x) ((x + 3u) & ~3u)
+#endif
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
