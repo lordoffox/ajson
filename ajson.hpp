@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 #ifndef _MSC_VER
-errno_t static inline fopen_s(FILE **f, const char *name, const char *mode) {
+errno_t inline fopen_s(FILE **f, const char *name, const char *mode) {
   errno_t ret = 0;
   assert(f);
   *f = fopen(name, mode);
@@ -72,7 +72,7 @@ namespace ajson
       this->alloc.deallocate(m_header_ptr, this->m_length);
     }
 
-    std::size_t read(char * buffer, std::size_t len)
+    inline std::size_t read(char * buffer, std::size_t len)
     {
       if (this->m_read_ptr + len > this->m_tail_ptr)
       {
@@ -84,7 +84,7 @@ namespace ajson
       return len;
     }
 
-    std::size_t growpup(std::size_t want_size)
+    inline std::size_t growpup(std::size_t want_size)
     {
       std::size_t new_size = ((want_size + INIT_AMSG_BUFF_SIZE - 1) / INIT_AMSG_BUFF_SIZE)*INIT_AMSG_BUFF_SIZE;
       std::size_t write_pos = this->m_write_ptr - this->m_header_ptr;
@@ -100,7 +100,7 @@ namespace ajson
       return new_size;
     }
 
-    std::size_t write(const char * buffer, std::size_t len)
+    inline std::size_t write(const char * buffer, std::size_t len)
     {
       std::size_t writed_len = this->m_write_ptr + len - this->m_header_ptr;
       if (writed_len > this->m_length)
@@ -112,9 +112,9 @@ namespace ajson
       return len;
     }
 
-    bool bad(){ return m_status != good; }
+    inline bool bad()const{ return m_status != good; }
 
-    ajson_store_buffer& seekp(int offset, int seek_dir)
+    inline ajson_store_buffer& seekp(int offset, int seek_dir)
     {
       switch (seek_dir)
       {
@@ -259,10 +259,10 @@ namespace ajson
     }
   };
 
-  template<typename jsonvalue_type,typename ty ,
+  template<typename jsonvalue_type, typename ty,
     typename ::std::enable_if <::std::is_arithmetic<ty>::value ||
     ::std::is_enum<ty>::value, int >::type = 0>
-  inline void read(const jsonvalue_type& json_value, ty& value)
+    inline void read(const jsonvalue_type& json_value, ty& value)
   {
     if (json_value.IsNull())
     {
@@ -313,10 +313,10 @@ namespace ajson
     }
   }
 
-  template<typename store_ty , typename ty,
+  template<typename store_ty, typename ty,
     typename ::std::enable_if < ::std::is_integral<ty>::value ||
     ::std::is_enum<ty>::value, int>::type = 0>
-  inline void write(store_ty& store_data, const ty& value)
+    inline void write(store_ty& store_data, const ty& value)
   {
     int64_t temp = (int64_t)value;
     char buffer[64];
@@ -349,7 +349,7 @@ namespace ajson
 
   template<typename store_ty, typename ty,
     typename ::std::enable_if<boost::is_floating_point<ty>::value, int>::type = 0>
-  inline void write(store_ty& store_data, const ty& value)
+    inline void write(store_ty& store_data, const ty& value)
   {
     char buffer[64] = { 0 };
     char * start = buffer;
@@ -481,7 +481,7 @@ namespace ajson
     }
   }
 
-  template<typename store_ty,typename char_traits_ty, typename char_alloc_type>
+  template<typename store_ty, typename char_traits_ty, typename char_alloc_type>
   inline void write(store_ty& store_data, const ::std::basic_string<char, char_traits_ty, char_alloc_type>& value)
   {
     static const char hexDigits[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
@@ -543,7 +543,7 @@ namespace ajson
     return;
   }
 
-  template<typename store_ty,typename ty>
+  template<typename store_ty, typename ty>
   inline void container_seq_write(store_ty& store_data, const ty& value)
   {
     store_data.write("[", 1);
@@ -577,7 +577,7 @@ namespace ajson
     container_seq_read(json_value, value);
   }
 
-  template<typename store_ty , typename ty, typename alloc_ty>
+  template<typename store_ty, typename ty, typename alloc_ty>
   inline void write(store_ty& store, const ::std::list<ty, alloc_ty>& value)
   {
     container_seq_write(store, value);
@@ -601,7 +601,7 @@ namespace ajson
     read(json_value, value);
   }
 
-  template<typename store_ty,typename ty>
+  template<typename store_ty, typename ty>
   inline void ajson_write(store_ty& store, const ty& value)
   {
     write(store, value);
@@ -642,10 +642,10 @@ namespace ajson
     return true;
   }
 
-  template<typename stroe_ty,typename ty>
+  template<typename stroe_ty, typename ty>
   inline bool save_to_buff(stroe_ty& buff, const ty& value)
   {
-    ajson_write(buff,value);
+    ajson_write(buff, value);
     buff.write("\0", 1);
     return true;
   }
@@ -705,9 +705,9 @@ namespace ajson
 #define AJSON_READ_MEMBER( r , v , elem ) \
 	member_ptr = json_value.FindMember( BOOST_DO_STRINGIZE(elem) );\
 	if ( member_ptr != json_value.MemberEnd() )\
-  	{\
+    	{\
 		::ajson::read( member_ptr->value , value.elem);\
-  	}
+    	}
 
 #define AJSON_WRITE_MEMBER( r ,v , elem ) \
 	member_name = BOOST_DO_STRINGIZE(elem);\
