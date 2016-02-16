@@ -1,54 +1,697 @@
-// (C) Copyright Ning Ding 2013.8
-// lordoffox@gmail.com
-// Distributed under the Boost Software License, Version 1.0. (See accompany-
-// ing file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
-
-#ifndef AJSON_HPP_DFGDFG39328429
-#define AJSON_HPP_DFGDFG39328429
-
-#include "rapidjson/rapidjson.h"
-#include "rapidjson/error/en.h"
-#include "rapidjson/document.h"
-#include "rapidjson/filereadstream.h"
-#include "rapidjson/internal/dtoa.h"
+#pragma once
 
 #include <cstdint>
-#include <type_traits>
-#include <boost/lexical_cast.hpp>
-#include <boost/preprocessor/seq/for_each.hpp>
-#include <boost/preprocessor/seq/seq.hpp>
-#include <boost/preprocessor/stringize.hpp>
-#include <boost/preprocessor/tuple/elem.hpp>
-#include <boost/preprocessor/facilities/empty.hpp>
-
-#include <string>
-#include <list>
+#include <cstdio>
+#include <exception>
 #include <deque>
+#include <list>
+#include <ios>
+#include <map>
+#include <memory>
+#include <queue>
+#include <string>
+#include <type_traits>
 #include <vector>
+#include <unordered_map>
+#include <stdlib.h>
+#include <cstring>
 
-#include <stdio.h>
-
-#ifndef _MSC_VER
-errno_t inline fopen_s(FILE **f, const char *name, const char *mode) {
-  errno_t ret = 0;
-  assert(f);
-  *f = fopen(name, mode);
-  /* Can't be sure about 1-to-1 mapping of errno and MS' errno_t */
-  if (!*f)
-    ret = errno;
-  return ret;
-}
-#endif
+#define STRINGFY_LIST(...) #__VA_ARGS__
 
 namespace ajson
 {
+  namespace detail
+  {
+    struct string_ref
+    {
+      char const *  str = nullptr;
+      size_t        len = 0;
+      bool operator == (string_ref const& rhs) const
+      {
+        if (len == rhs.len)
+        {
+          for (size_t i = 0; i < len; ++i)
+          {
+            if (str[i] != rhs.str[i])
+            {
+              return false;
+            }
+          }
+          return true;
+        }
+        return false;
+      }
+    };
+
+    typedef ::std::vector<string_ref> filed_list;
+
+    inline void add_filed(char const * pre, char const * cur, filed_list& fileds)
+    {
+      size_t len = cur - pre;
+      if (len > 2)
+      {
+        fileds.emplace_back();
+        auto& f = fileds.back();
+        f.str = pre + 2;
+        f.len = cur - pre - 2;
+      }
+    }
+
+    inline char const * char_table()
+    {
+      static char table[] = {
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 16, 17, 17, 16,
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+        16, 16, 17, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+        16, 16, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 16, 16, 16, 16, 16,
+        16, 16, 10, 11, 12, 13, 14, 15, 16, 16, 16, 16, 16, 16, 16, 16,
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+        16, 16, 10, 11, 12, 13, 14, 15 };
+      return table;
+    }
+
+    inline bool is_ws(char c)
+    {
+      if (c > ' ')
+        return false;
+      return char_table()[c] == 17;
+    }
+
+    inline char const * skip_ws(char const * str)
+    {
+      while (is_ws(*str))++str;
+      return str;
+    }
+
+    //input "v.abc,v.def,v.xyz"
+    //output vector<string_ref> = ["abc","def","xyz"];
+    inline filed_list split_fields(char const * info)
+    {
+      filed_list fileds;
+      char const * pre = info = skip_ws(info);
+      while (*info != 0)
+      {
+        ++info;
+        if (is_ws(*info))
+        {
+          add_filed(pre, info, fileds);
+          info = skip_ws(info);
+          ++info;
+          pre = skip_ws(info);
+        }
+        else if (*info == ',')
+        {
+          add_filed(pre, info, fileds);
+          ++info;
+          pre = skip_ws(info);
+        }
+      }
+      add_filed(pre, info, fileds);
+      return fileds;
+    }
+
+    template< class T >
+    struct is_signed_intergral_like : std::integral_constant < bool,
+      (std::is_integral<T>::value) &&
+      std::is_signed<T>::value
+    > {};
+
+    template< class T >
+    struct is_unsigned_intergral_like : std::integral_constant < bool,
+      (std::is_integral<T>::value) &&
+      std::is_unsigned<T>::value
+    > {};
+
+    template < template <typename...> class U, typename T >
+    struct is_template_instant_of : std::false_type {};
+
+    template < template <typename...> class U, typename... args >
+    struct is_template_instant_of< U, U<args...> > : std::true_type{};
+
+    template<typename T>
+    struct is_stdstring : is_template_instant_of < std::basic_string, T >
+    {};
+
+    template< class T >
+    struct is_sequence_container : std::integral_constant < bool,
+      is_template_instant_of<std::deque, T>::value ||
+      is_template_instant_of<std::list, T>::value ||
+      is_template_instant_of<std::vector, T>::value ||
+      is_template_instant_of<std::queue, T>::value
+    > {};
+
+    template< class T >
+    struct is_associat_container : std::integral_constant < bool,
+      is_template_instant_of<std::map, T>::value ||
+      is_template_instant_of<std::unordered_map, T>::value
+    > {};
+
+    template< class T >
+    struct is_emplace_back_able : std::integral_constant < bool,
+      is_template_instant_of<std::deque, T>::value ||
+      is_template_instant_of<std::list, T>::value ||
+      is_template_instant_of<std::vector, T>::value
+    > {};
+  }
+
+  struct token
+  {
+    detail::string_ref str;
+    enum
+    {
+      t_string,
+      t_int,
+      t_uint,
+      t_number,
+      t_ctrl,
+      t_end,
+    } type;
+    union
+    {
+      int64_t   i64;
+      uint64_t  u64;
+      double    d64;
+    } value;
+    double decimal = 0.1;
+    inline void reset(){ decimal = 0.1; }
+  };
+
+#ifdef _MSC_VER
+#define NOEXCEPT
+#else
+#define NOEXCEPT noexcept
+#endif
+
+  class exception : public std::exception
+  {
+    std::string msg_;
+  public:
+    exception(std::string const& msg)
+      :msg_(msg)
+    {}
+    char const * what() const NOEXCEPT{ return msg_.c_str(); }
+  };
+
+  class reader
+  {
+    token   cur_tok_;
+    size_t  cur_col_ = 0;
+    size_t  cur_line_ = 0;
+    size_t  len_ = 0;
+    size_t  cur_offset_ = 0;
+    bool    end_mark_ = false;
+    char  * ptr_ = nullptr;
+
+    inline char read() const
+    {
+      if (end_mark_)
+        return 0;
+      return ptr_[cur_offset_];
+    }
+
+    inline void take()
+    {
+      if (end_mark_ == false)
+      {
+        ++cur_offset_;
+        char v = ptr_[cur_offset_];
+        if (v != '\r')
+          ++cur_col_;
+        if (len_ > 0 && cur_offset_ >= len_)
+        {
+          end_mark_ = true;
+        }
+        else if (v == 0)
+        {
+          end_mark_ = true;
+        }
+        if (v == '\n')
+        {
+          cur_col_ = 0;
+          ++cur_line_;
+        }
+      }
+    }
+
+    char skip()
+    {
+      auto c = read();
+      while (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+      {
+        take();
+        c = read();
+      }
+      return c;
+    }
+
+    inline void fill_escape_char(size_t count, char c)
+    {
+      if (count == 0)
+        return;
+      ptr_[cur_offset_ - count] = c;
+    }
+
+    inline char char_to_hex(char v)
+    {
+      if (v < 'f')
+      {
+        v = detail::char_table()[v];
+      }
+      else
+      {
+        v = 16;
+      }
+      if (v > 15)
+        error("utf8 code error!");
+      return v;
+    }
+
+    inline uint64_t read_utf()
+    {
+      char v = char_to_hex(read());
+      uint64_t utf = v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      take();
+      return utf;
+    }
+
+    inline void esacpe_utf8(size_t& esc_count)
+    {
+      uint64_t utf1 = read_utf();
+      esc_count += 6;
+
+      if (utf1 < 0x80)
+      {
+        fill_escape_char(esc_count, (char)utf1);
+      }
+      else if (utf1 < 0x800)
+      {
+        fill_escape_char(esc_count, (char)(0xC0 | ((utf1 >> 6) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 & 0x3F))));
+      }
+      else if (utf1 < 0x80000)
+      {
+        fill_escape_char(esc_count, (char)(0xE0 | ((utf1 >> 12) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
+        fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 & 0x3F))));
+      }
+      else
+      {
+        if (utf1 < 0x110000)
+        {
+          error("utf8 code error!");
+        }
+        fill_escape_char(esc_count, (char)(0xF0 | ((utf1 >> 18) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 12) & 0x3F)));
+        fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
+        fill_escape_char(esc_count - 3, (char)(0x80 | ((utf1 & 0x3F))));
+      }
+    }
+
+    void parser_quote_string()
+    {
+      take();
+      cur_tok_.str.str = ptr_ + cur_offset_;
+      auto c = read();
+      size_t esc_count = 0;
+      do
+      {
+        switch (c)
+        {
+        case 0:
+        case '\n':
+        {
+          error("not a valid quote string!");
+          break;
+        }
+        case '\\':
+        {
+          take();
+          c = read();
+          switch (c)
+          {
+          case 'b':
+          {
+            c = '\b';
+            break;
+          }
+          case 'f':
+          {
+            c = '\f';
+            break;
+          }
+          case 'n':
+          {
+            c = '\n';
+            break;
+          }
+          case 'r':
+          {
+            c = '\r';
+            break;
+          }
+          case 't':
+          {
+            c = '\t';
+            break;
+          }
+          case '"':
+          {
+            break;
+          }
+          case 'u':
+          {
+            take();
+            esacpe_utf8(esc_count);
+            continue;
+          }
+          default:
+          {
+            error("unknown escape char!");
+          }
+          }
+          ++esc_count;
+          break;
+        }
+        case '"':
+        {
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
+          take();
+          return;
+        }
+        }
+        fill_escape_char(esc_count, c);
+        take();
+        c = read();
+      } while (true);
+    }
+
+    void parser_string()
+    {
+      cur_tok_.str.str = ptr_ + cur_offset_;
+      take();
+      auto c = read();
+      size_t esc_count = 0;
+      do
+      {
+        switch (c)
+        {
+        case 0:
+        case '\n':
+        {
+          error("not a valid string!");
+          break;
+        }
+        case '\\':
+        {
+          take();
+          c = read();
+          switch (c)
+          {
+          case 'b':
+          {
+            c = '\b';
+            break;
+          }
+          case 'f':
+          {
+            c = '\f';
+            break;
+          }
+          case 'n':
+          {
+            c = '\n';
+            break;
+          }
+          case 'r':
+          {
+            c = '\r';
+            break;
+          }
+          case 't':
+          {
+            c = '\t';
+            break;
+          }
+          case 'u':
+          {
+            take();
+            esacpe_utf8(esc_count);
+            continue;
+          }
+          default:
+          {
+            error("unknown escape char!");
+          }
+          }
+          ++esc_count;
+          break;
+        }
+        case ' ':
+        case '\t':
+        case '\r':
+        case ',':
+        case '[':
+        case ']':
+        case ':':
+        case '{':
+        case '}':
+        {
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
+          return;
+        }
+        }
+        fill_escape_char(esc_count, c);
+        take();
+        c = read();
+      } while (true);
+    }
+
+    void parser_number()
+    {
+      cur_tok_.str.str = ptr_ + cur_offset_;
+      take();
+      auto c = read();
+      do
+      {
+        switch (c)
+        {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+          if (cur_tok_.type == token::t_int)
+          {
+            cur_tok_.value.i64 *= 10;
+            cur_tok_.value.i64 += c - '0';
+          }
+          else if (cur_tok_.type == token::t_uint)
+          {
+            cur_tok_.value.u64 *= 10;
+            cur_tok_.value.u64 += c - '0';
+          }
+          else if (cur_tok_.type == token::t_number)
+          {
+            cur_tok_.value.d64 += cur_tok_.decimal * (c - '0');
+            cur_tok_.decimal *= 0.1;
+          }
+          break;
+        }
+        case '.':
+        {
+          if (cur_tok_.type == token::t_int)
+          {
+            cur_tok_.type = token::t_number;
+            cur_tok_.value.d64 = (double)cur_tok_.value.i64;
+            cur_tok_.reset();
+          }
+          else if (cur_tok_.type == token::t_uint)
+          {
+            cur_tok_.type = token::t_number;
+            cur_tok_.value.d64 = (double)cur_tok_.value.u64;
+            cur_tok_.reset();
+          }
+          else if (cur_tok_.type == token::t_number)
+          {
+            error("not a valid number!");
+          }
+          break;
+        }
+        default:
+        {
+          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          return;
+        }
+        }
+        take();
+        c = read();
+      } while (1);
+    }
+  public:
+    reader(char * ptr = nullptr, size_t len = -1)
+      :ptr_(ptr), len_(len)
+    {
+      if (ptr == nullptr)
+      {
+        end_mark_ = true;
+      }
+      else if (len == 0)
+      {
+        end_mark_ = true;
+      }
+      else if (ptr[0] == 0)
+      {
+        end_mark_ = true;
+      }
+      next();
+    }
+
+    inline void error(const char * message) const
+    {
+      std::string msg = "error at line :";
+      msg += cur_line_;
+      msg += " col :";
+      msg += cur_col_;
+      msg += " msg:";
+      msg += message;
+      throw exception(msg);
+    }
+
+    inline token const&  peek() const
+    {
+      return cur_tok_;
+    }
+
+    void next()
+    {
+      auto c = skip();
+      bool do_next = false;
+      switch (c)
+      {
+      case 0:
+        cur_tok_.type = token::t_end;
+        cur_tok_.str.str = ptr_ + cur_offset_;
+        cur_tok_.str.len = 1;
+        break;
+      case '{':
+      case '}':
+      case '[':
+      case ']':
+      case ':':
+      case ',':
+      {
+        cur_tok_.type = token::t_ctrl;
+        cur_tok_.str.str = ptr_ + cur_offset_;
+        cur_tok_.str.len = 1;
+        take();
+        break;
+      }
+      case '/':
+      {
+        take();
+        c = read();
+        if (c == '/')
+        {
+          take();
+          c = read();
+          while (c != '\n' && c != 0)
+          {
+            take();
+            c = read();
+          }
+          do_next = true;
+          break;
+        }
+        else if (c == '*')
+        {
+          take();
+          c = read();
+          do
+          {
+            while (c != '*')
+            {
+              if (c == 0)
+              {
+                return;
+              }
+              take();
+              c = read();
+            }
+            take();
+            c = read();
+            if (c == '/')
+            {
+              take();
+              do_next = true;
+              break;
+            }
+          } while (true);
+        }
+        //error parser comment
+        error("not a comment!");
+      }
+      case '"':
+      {
+        cur_tok_.type = token::t_string;
+        parser_quote_string();
+        break;
+      }
+      default:
+      {
+        if (c >= '0' && c <= '9')
+        {
+          cur_tok_.type = token::t_uint;
+          cur_tok_.value.u64 = c - '0';
+          parser_number();
+        }
+        else if (c == '-')
+        {
+          cur_tok_.type = token::t_int;
+          cur_tok_.value.u64 = '0' - c;
+          parser_number();
+        }
+        else
+        {
+          cur_tok_.type = token::t_string;
+          parser_string();
+        }
+      }
+      }
+      if (do_next == false)
+        return;
+      next();
+    }
+
+    inline bool expect(char c)
+    {
+      return cur_tok_.str.str[0] == c;
+    }
+  };
+
   template <typename alloc_ty>
-  struct ajson_store_buffer
+  struct ajson_string_stream
   {
   private:
     alloc_ty alloc;
   public:
-
     enum { good, read_overflow };
 
     char * m_header_ptr;
@@ -58,16 +701,16 @@ namespace ajson
     int							m_status;
     std::size_t			m_length;
 
-    enum{ INIT_AMSG_BUFF_SIZE = 1024 };
-    ajson_store_buffer() :m_length(INIT_AMSG_BUFF_SIZE), m_status(good)
+    enum{ INIT_BUFF_SIZE = 1024 };
+    ajson_string_stream() :m_length(INIT_BUFF_SIZE), m_status(good)
     {
-      this->m_header_ptr = this->alloc.allocate(INIT_AMSG_BUFF_SIZE);
+      this->m_header_ptr = this->alloc.allocate(INIT_BUFF_SIZE);
       this->m_read_ptr = this->m_header_ptr;
       this->m_write_ptr = this->m_header_ptr;
       this->m_tail_ptr = this->m_header_ptr + m_length;
     }
 
-    ~ajson_store_buffer()
+    ~ajson_string_stream()
     {
       this->alloc.deallocate(m_header_ptr, this->m_length);
     }
@@ -79,19 +722,19 @@ namespace ajson
         m_status = read_overflow;
         return 0;
       }
-      memcpy(buffer, this->m_read_ptr, len);
+      std::memcpy(buffer, this->m_read_ptr, len);
       this->m_read_ptr += len;
       return len;
     }
 
     inline std::size_t growpup(std::size_t want_size)
     {
-      std::size_t new_size = ((want_size + INIT_AMSG_BUFF_SIZE - 1) / INIT_AMSG_BUFF_SIZE)*INIT_AMSG_BUFF_SIZE;
+      std::size_t new_size = ((want_size + INIT_BUFF_SIZE - 1) / INIT_BUFF_SIZE)*INIT_BUFF_SIZE;
       std::size_t write_pos = this->m_write_ptr - this->m_header_ptr;
       std::size_t read_pos = this->m_read_ptr - this->m_header_ptr;
       char * temp = this->m_header_ptr;
       this->m_header_ptr = this->alloc.allocate(new_size);
-      memcpy(this->m_header_ptr, temp, this->m_length);
+      std::memcpy(this->m_header_ptr, temp, this->m_length);
       this->alloc.deallocate(temp, this->m_length);
       this->m_length = new_size;
       this->m_write_ptr = this->m_header_ptr + write_pos;
@@ -107,14 +750,26 @@ namespace ajson
       {
         this->growpup(writed_len);
       }
-      memcpy((void*)this->m_write_ptr, buffer, len);
+      std::memcpy((void*)this->m_write_ptr, buffer, len);
       this->m_write_ptr += len;
       return len;
     }
 
+    inline void putc(char c)
+    {
+      std::size_t writed_len = this->m_write_ptr + 1 - this->m_header_ptr;
+      if (writed_len > this->m_length)
+      {
+        this->growpup(writed_len);
+      }
+      *this->m_write_ptr = c;
+      ++this->m_write_ptr;
+    }
+
+
     inline bool bad()const{ return m_status != good; }
 
-    inline ajson_store_buffer& seekp(int offset, int seek_dir)
+    inline ajson_string_stream& seekp(int offset, int seek_dir)
     {
       switch (seek_dir)
       {
@@ -176,6 +831,12 @@ namespace ajson
       return this->m_header_ptr;
     }
 
+    std::basic_string<char, std::char_traits<char>, alloc_ty> str()
+    {
+      std::basic_string<char, std::char_traits<char>, alloc_ty> s(this->m_header_ptr, this->write_length());
+      return s;
+    }
+
     inline ::std::size_t read_length() const
     {
       return this->m_read_ptr - this->m_header_ptr;
@@ -187,7 +848,7 @@ namespace ajson
     }
   };
 
-  typedef ajson_store_buffer<std::allocator<char> > store_buffer;
+  typedef ajson_string_stream<std::allocator<char> > string_stream;
 
   struct ajson_file_stream
   {
@@ -200,7 +861,7 @@ namespace ajson
     enum{ INIT_AMSG_BUFF_SIZE = 1024 };
     ajson_file_stream(const char * filename) :m_f(NULL), m_status(good)
     {
-      fopen_s(&this->m_f, filename, "w");
+      this->m_f = std::fopen(filename, "w");
       if (NULL == this->m_f)
       {
         this->m_status = file_error;
@@ -217,14 +878,19 @@ namespace ajson
 
     inline std::size_t read(char * buffer, std::size_t len)
     {
-      std::size_t rlen = fread(buffer, len, 1, this->m_f);
+      std::size_t rlen = std::fread(buffer, len, 1, this->m_f);
       return rlen;
     }
 
     inline std::size_t write(const char * buffer, std::size_t len)
     {
-      std::size_t wlen = fwrite(buffer, len, 1, this->m_f);
+      std::size_t wlen = std::fwrite(buffer, len, 1, this->m_f);
       return wlen;
+    }
+
+    inline void putc(char c)
+    {
+      std::fputc(c, this->m_f);
     }
 
     inline bool bad(){ return m_status != good; }
@@ -239,15 +905,15 @@ namespace ajson
         {
           offset = 0;
         }
-        return fseek(this->m_f, offset, SEEK_SET);
+        return std::fseek(this->m_f, offset, SEEK_SET);
       }
       case std::ios::cur:
       {
-        return fseek(this->m_f, offset, SEEK_CUR);
+        return std::fseek(this->m_f, offset, SEEK_CUR);
       }
       case std::ios::end:
       {
-        return fseek(this->m_f, offset, SEEK_END);
+        return std::fseek(this->m_f, offset, SEEK_END);
       }
       }
       return 0;
@@ -255,488 +921,797 @@ namespace ajson
 
     inline void clear()
     {
-      fseek(this->m_f, 0, SEEK_SET);
+      std::fseek(this->m_f, 0, SEEK_SET);
     }
   };
 
-  template<typename jsonvalue_type, typename ty,
-    typename ::std::enable_if <::std::is_arithmetic<ty>::value ||
-    ::std::is_enum<ty>::value, int >::type = 0>
-    inline void read(const jsonvalue_type& json_value, ty& value)
+  template<typename stream_ty>
+  struct lite_write
   {
-    if (json_value.IsNull())
-    {
-      value = 0;
-      return;
-    }
-    if (json_value.IsBool())
-    {
-      bool jvalue = json_value.GetBool();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsInt())
-    {
-      int32_t jvalue = json_value.GetInt();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsUint())
-    {
-      uint32_t jvalue = json_value.GetUint();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsInt64())
-    {
-      int64_t jvalue = json_value.GetInt64();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsUint64())
-    {
-      uint64_t jvalue = json_value.GetUint64();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsDouble())
-    {
-      double jvalue = json_value.GetDouble();
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-    if (json_value.IsString())
-    {
-      int64_t jvalue = atol(json_value.GetString());
-      value = static_cast<ty>(jvalue);
-      return;
-    }
-  }
+    stream_ty& s_;
+    lite_write(stream_ty& s) :s_(s){}
 
-  template<typename store_ty, typename ty,
-    typename ::std::enable_if < ::std::is_integral<ty>::value ||
-    ::std::is_enum<ty>::value, int>::type = 0>
-    inline void write(store_ty& store_data, const ty& value)
-  {
-    int64_t temp = (int64_t)value;
-    char buffer[64];
-    buffer[63] = 0;
-    size_t len = 64;
-    size_t pos = 62;
-    bool Sig = false;
-    if (temp < 0)
+    inline void write_bool(bool v)
     {
-      Sig = true;
-      temp *= -1;
-    }
-    if (temp == 0)
-    {
-      buffer[pos--] = '0';
-    }
-    while (temp)
-    {
-      buffer[pos--] = (char)((temp % 10) + '0');
-      temp = temp / 10;
-    }
-    if (Sig)
-    {
-      buffer[pos--] = '-';
-    }
-    ++pos;
-    memmove(buffer, buffer + pos, (len - pos));
-    store_data.write(buffer, len - pos - 1);
-  }
-
-  template<typename store_ty, typename ty,
-    typename ::std::enable_if<boost::is_floating_point<ty>::value, int>::type = 0>
-    inline void write(store_ty& store_data, const ty& value)
-  {
-    char buffer[64] = { 0 };
-    char * start = buffer;
-    char* end = rapidjson::internal::dtoa(value, buffer);
-    store_data.write(buffer, end - start);
-  }
-
-  template<typename jsonvalue_type>
-  inline void read(const jsonvalue_type& json_value, bool& value)
-  {
-    if (json_value.IsNull())
-    {
-      value = 0;
-      return;
-    }
-    if (json_value.IsBool())
-    {
-      bool jvalue = json_value.GetBool();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsInt())
-    {
-      int32_t jvalue = json_value.GetInt();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsUint())
-    {
-      uint32_t jvalue = json_value.GetUint();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsInt64())
-    {
-      int64_t jvalue = json_value.GetInt64();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsUint64())
-    {
-      uint64_t jvalue = json_value.GetUint64();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsDouble())
-    {
-      double jvalue = json_value.GetDouble();
-      value = (jvalue != 0);
-      return;
-    }
-    if (json_value.IsString())
-    {
-      int64_t jvalue = atol(json_value.GetString());
-      value = (jvalue != 0);
-      return;
-    }
-  }
-
-  template<typename store_ty>
-  inline void write(store_ty& store_data, const bool& value)
-  {
-    if (value)
-    {
-      store_data.write("1", 1);
-    }
-    else
-    {
-      store_data.write("0", 1);
-    }
-  }
-
-  template<typename char_traits_ty, typename char_alloc_type, typename jsonvalue_type>
-  inline void read(const jsonvalue_type& json_value, ::std::basic_string<char, char_traits_ty, char_alloc_type>& value)
-  {
-    typedef ::std::basic_string<char, char_traits_ty, char_alloc_type> value_type;
-    if (json_value.IsNull())
-    {
-      value = "";
-      return;
-    }
-    if (json_value.IsBool())
-    {
-      bool jvalue = json_value.GetBool();
-      if (jvalue)
-      {
-        value = "1";
-      }
+      if (v)
+        s_.putc('1');
       else
-      {
-        value = "0";
-      }
-      return;
+        s_.putc('0');
     }
-    if (json_value.IsInt())
-    {
-      int32_t jvalue = json_value.GetInt();
-      value = ::boost::lexical_cast<value_type>(jvalue);
-      return;
-    }
-    if (json_value.IsUint())
-    {
-      uint32_t jvalue = json_value.GetUint();
-      value = ::boost::lexical_cast<value_type>(jvalue);
-      return;
-    }
-    if (json_value.IsInt64())
-    {
-      int64_t jvalue = json_value.GetInt64();
-      value = ::boost::lexical_cast<value_type>(jvalue);
-      return;
-    }
-    if (json_value.IsUint64())
-    {
-      uint64_t jvalue = json_value.GetUint64();
-      value = ::boost::lexical_cast<value_type>(jvalue);
-      return;
-    }
-    if (json_value.IsDouble())
-    {
-      double jvalue = json_value.GetDouble();
-      value = ::boost::lexical_cast<value_type>(jvalue);
-      return;
-    }
-    if (json_value.IsString())
-    {
-      value = json_value.GetString();
-      return;
-    }
-  }
 
-  template<typename store_ty, typename char_traits_ty, typename char_alloc_type>
-  inline void write(store_ty& store_data, const ::std::basic_string<char, char_traits_ty, char_alloc_type>& value)
-  {
-    static const char hexDigits[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-    static const char escape[256] = {
+    inline void write_liter(char const * str, size_t len)
+    {
+      s_.write(str, len);
+    }
+
+    inline void write_str(char const * str, size_t len)
+    {
+      static char const * hex_table = "0123456789ABCDEF";
+      static char const escape[256] = {
 #define Z16 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-      //0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
-      'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'b', 't', 'n', 'u', 'f', 'r', 'u', 'u', // 00
-      'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', // 10
-      0, 0, '"', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20
-      Z16, Z16,																		// 30~4F
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\\', 0, 0, 0, // 50
-      Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16								// 60~FF
+        //0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'b', 't', 'n', 'u', 'f', 'r', 'u', 'u', // 00
+        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', // 10
+        0, 0, '"', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20
+        Z16, Z16,																		// 30~4F
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\\', 0, 0, 0, // 50
+        Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16								// 60~FF
 #undef Z16
-    };
+      };
 
-    store_data.write("\"", 1);
-    std::size_t length = value.length();
-    const char * ptr = value.c_str();
-    const char * end = ptr + length;
-    while (ptr < end)
-    {
-      const char c = *ptr;
-      ++ptr;
-      if (escape[(unsigned char)c])
+      s_.putc('"');
+      char const * ptr = str;
+      char const * end = ptr + len;
+      while (ptr < end)
       {
-        store_data.write("\\", 1);
-        store_data.write(&escape[(unsigned char)c], 1);
-        if (escape[(unsigned char)c] == 'u')
+        const char c = *ptr;
+        ++ptr;
+        if (escape[(unsigned char)c])
         {
-          char buff[4] = { '0', 'x' };
-          buff[2] = (hexDigits[(unsigned char)c >> 4]);
-          buff[3] = (hexDigits[(unsigned char)c & 0xF]);
-          store_data.write(buff, 4);
+          s_.putc('\\');
+          auto ec = escape[(unsigned char)c];
+          s_.putc(ec);
+          if (ec == 'u')
+          {
+            char buff[4] = { '0', '0' };
+            buff[2] = (hex_table[((unsigned char)c) >> 4]);
+            buff[3] = (hex_table[((unsigned char)c) & 0xF]);
+            s_.write(buff, 4);
+          }
+        }
+        else
+        {
+          s_.putc(c);
         }
       }
+      s_.putc('"');
+    }
+
+    inline void putc(char c)
+    {
+      s_.putc(c);
+    }
+  };
+
+  template<typename ty, class enable = void>
+  struct json_impl;
+
+  template<>
+  struct json_impl < bool, void >
+  {
+    static inline void read(reader& rd, bool& val)
+    {
+      auto& tok = rd.peek();
+      switch (tok.type)
+      {
+      case token::t_string:
+      {
+        char const * ptr = tok.str.str;
+        if (tok.str.len == 4)
+        {
+          val = (ptr[0] == 't' || ptr[0] == 'T') &&
+            (ptr[0] == 'u' || ptr[0] == 'U') &&
+            (ptr[0] == 'r' || ptr[0] == 'R') &&
+            (ptr[0] == 'e' || ptr[0] == 'E');
+        }
+        else
+        {
+          val = false;
+        }
+        break;
+      }
+      case token::t_int:
+      {
+        val = (tok.value.i64 != 0);
+        break;
+      }
+      case token::t_uint:
+      {
+        val = (tok.value.u64 != 0);
+        break;
+      }
+      case token::t_number:
+      {
+        val = (tok.value.d64 != 0.0);
+        break;
+      }
+      default:
+      {
+        rd.error("not a valid bool.");
+      }
+      }
+      rd.next();
+    }
+
+    template<typename write_ty>
+    static inline void write(write_ty& wt, bool const& val)
+    {
+      wt.write_bool(val);
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, bool const& val)
+    {
+      wt.putc('"');
+      wt.write_bool(val);
+      wt.putc('"');
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <detail::is_signed_intergral_like<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      auto& tok = rd.peek();
+      switch (tok.type)
+      {
+      case token::t_string:
+      {
+        int64_t temp = std::strtoll(tok.str.str, nullptr, 10);
+        val = static_cast<ty>(temp);
+        break;
+      }
+      case token::t_int:
+      {
+        val = static_cast<ty>(tok.value.i64);
+        break;
+      }
+      case token::t_uint:
+      {
+        val = static_cast<ty>(tok.value.u64);
+        break;
+      }
+      case token::t_number:
+      {
+        val = static_cast<ty>(tok.value.d64);
+        break;
+      }
+      default:
+      {
+        rd.error("not a valid signed integral like number.");
+      }
+      }
+      rd.next();
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      int64_t temp = (int64_t)val;
+      char buffer[64];
+      buffer[63] = 0;
+      size_t len = 64;
+      size_t pos = 62;
+      bool Sig = false;
+      if (temp < 0)
+      {
+        Sig = true;
+        temp *= -1;
+      }
+      if (temp == 0)
+      {
+        buffer[pos--] = '0';
+      }
+      while (temp)
+      {
+        buffer[pos--] = (char)((temp % 10) + '0');
+        temp = temp / 10;
+      }
+      if (Sig)
+      {
+        buffer[pos--] = '-';
+      }
+      ++pos;
+      wt.write_liter(buffer + pos, len - pos - 1);
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      wt.putc('"');
+      write<write_ty>(wt, val);
+      wt.putc('"');
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <detail::is_unsigned_intergral_like<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      auto& tok = rd.peek();
+      switch (tok.type)
+      {
+      case token::t_string:
+      {
+        uint64_t temp = std::strtoull(tok.str.str, nullptr, 10);
+        val = static_cast<ty>(temp);
+        break;
+      }
+      case token::t_int:
+      {
+        if (tok.value.i64 < 0)
+        {
+          rd.error("assign a negative signed integral to unsigned integral number.");
+        }
+        val = static_cast<ty>(tok.value.i64);
+        break;
+      }
+      case token::t_uint:
+      {
+        val = static_cast<ty>(tok.value.u64);
+        break;
+      }
+      case token::t_number:
+      {
+        if (tok.value.d64 < 0)
+        {
+          rd.error("assign a negative float point to unsigned integral number.");
+        }
+        val = static_cast<ty>(tok.value.d64);
+        break;
+      }
+      default:
+      {
+        rd.error("not a valid unsigned integral like number.");
+      }
+      }
+      rd.next();
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      uint64_t temp = (uint64_t)val;
+      char buffer[64];
+      buffer[63] = 0;
+      size_t len = 64;
+      size_t pos = 62;
+      if (temp == 0)
+      {
+        buffer[pos--] = '0';
+      }
+      while (temp)
+      {
+        buffer[pos--] = (char)((temp % 10) + '0');
+        temp = temp / 10;
+      }
+      ++pos;
+      wt.write_liter(buffer + pos, len - pos - 1);
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      wt.putc('"');
+      write<write_ty>(wt, val);
+      wt.putc('"');
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <std::is_enum<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      typedef typename std::underlying_type<ty>::type raw_type;
+      json_impl<raw_type>::read(rd, (raw_type&)val);
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      typedef typename std::underlying_type<ty>::type raw_type;
+      json_impl<raw_type>::write(wt, val);
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      typedef typename std::underlying_type<ty>::type raw_type;
+      json_impl<raw_type>::write_key(wt, val);
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <std::is_floating_point<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      auto& tok = rd.peek();
+      switch (tok.type)
+      {
+      case token::t_string:
+      {
+        double temp = std::strtold(tok.str.str, nullptr);
+        val = static_cast<ty>(temp);
+        break;
+      }
+      case token::t_int:
+      {
+        val = static_cast<ty>(tok.value.i64);
+        break;
+      }
+      case token::t_uint:
+      {
+        val = static_cast<ty>(tok.value.u64);
+        break;
+      }
+      case token::t_number:
+      {
+        val = static_cast<ty>(tok.value.d64);
+        break;
+      }
+      default:
+      {
+        rd.error("not a valid float point number.");
+      }
+      }
+      rd.next();
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      char buffer[64] = { 0 };
+#ifdef _MSC_VER
+      _gcvt_s(buffer, val, 62);
+#else
+      gcvt(val, 62, buffer);
+#endif // MSVC
+      wt.write_liter(buffer, std::strlen(buffer));
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      wt.putc('"');
+      write<write_ty>(wt, val);
+      wt.putc('"');
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <detail::is_stdstring<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      auto& tok = rd.peek();
+      if (tok.type == token::t_string)
+      {
+        val.assign(tok.str.str, tok.str.len);
+      }
       else
       {
-        store_data.write(&c, 1);
+        rd.error("not a valid string.");
       }
+      rd.next();
     }
-    store_data.write("\"", 1);
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      wt.write_str(val.data(), val.length());
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      write<write_ty>(wt, val);
+    }
+  };
+
+  template<typename ty>
+  inline typename std::enable_if <detail::is_emplace_back_able<ty>::value, void>::type
+    emplace_back(ty& val)
+  {
+    val.emplace_back();
   }
 
-  template<typename ty, typename jsonvalue_type>
-  inline void container_seq_read(const jsonvalue_type& json_value, ty& value)
+  template<typename ty>
+  inline typename std::enable_if <detail::is_template_instant_of<std::queue, ty>::value, void>::type
+    emplace_back(ty& val)
   {
-    value.clear();
-    if (json_value.IsArray())
+    val.emplace();
+  }
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <detail::is_sequence_container<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
     {
-      ::rapidjson::SizeType len = json_value.Size();
-      value.resize(len);
-      ::rapidjson::SizeType i = 0;
-      for (ty::iterator iter = value.begin(); iter != value.end(); ++iter, ++i)
+      if (rd.expect('[') == false)
       {
-        read(json_value[i], *iter);
-        read(json_value[i], *iter);
+        rd.error("array must start with [.");
+      }
+      rd.next();
+      auto tok = &rd.peek();
+      while (tok->str.str[0] != ']')
+      {
+        emplace_back(val);
+        json_impl<typename ty::value_type>::read(rd, val.back());
+        tok = &rd.peek();
+        if (tok->str.str[0] == ',')
+        {
+          rd.next();
+          tok = &rd.peek();
+          continue;
+        }
+        else if (tok->str.str[0] == ']')
+        {
+          break;
+        }
+        else
+        {
+          rd.error("no valid array!");
+        }
+      }
+      rd.next();
+      return;
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      wt.putc('[');
+      auto sz = val.size();
+      for (auto& i : val)
+      {
+        json_impl<typename ty::value_type>::write(wt, i);
+        if (sz-- > 1)
+          wt.putc(',');
+      }
+      wt.putc(']');
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <detail::is_associat_container<ty>::value>::type >
+  {
+    static inline void read(reader& rd, ty& val)
+    {
+      if (rd.expect('{') == false)
+      {
+        rd.error("object must start with {!");
+      }
+      rd.next();
+      auto tok = &rd.peek();
+      while (tok->str.str[0] != '}')
+      {
+        typename ty::key_type key;
+        typename ty::mapped_type value;
+        json_impl<typename ty::key_type>::read(rd, key);
+        if (rd.expect(':') == false)
+        {
+          rd.error("invalid object!");
+        }
+        rd.next();
+        json_impl<typename ty::mapped_type>::read(rd, value);
+        val[key] = value;
+        tok = &rd.peek();
+        if (tok->str.str[0] == ',')
+        {
+          rd.next();
+          tok = &rd.peek();
+          continue;
+        }
+        else if (tok->str.str[0] == '}')
+        {
+          break;
+        }
+        else
+        {
+          rd.error("no valid object!");
+        }
+      }
+      rd.next();
+      return;
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, ty const& val)
+    {
+      wt.putc('{');
+      auto sz = val.size();
+      for (auto& i : val)
+      {
+        json_impl<typename ty::key_type>::write_key(wt, i.first);
+        wt.putc(':');
+        json_impl<typename ty::mapped_type>::write(wt, i.second);
+        if (sz-- > 1)
+          wt.putc(',');
+      }
+      wt.putc('}');
+    }
+  };
+
+  inline void skip_array(reader& rd);
+
+  inline void skip_object(reader& rd);
+
+  inline void skip(reader& rd)
+  {
+    auto& tok = rd.peek();
+    switch (tok.type)
+    {
+    case token::t_string:
+    case token::t_int:
+    case token::t_uint:
+    case token::t_number:
+    {
+      rd.next();
+      return;
+    }
+    case token::t_ctrl:
+    {
+      if (tok.str.str[0] == '[')
+      {
+        rd.next();
+        skip_array(rd);
+        return;
+      }
+      else if (tok.str.str[0] == '{')
+      {
+        rd.next();
+        skip_object(rd);
+        return;
       }
     }
+    case token::t_end:
+    {
+      return;
+    }
+    }
+    rd.error("invalid json document!");
+  }
+
+  inline void skip_array(reader& rd)
+  {
+    auto tok = &rd.peek();
+    while (tok->str.str[0] != ']')
+    {
+      skip(rd);
+      rd.next();
+      tok = &rd.peek();
+      if (tok->str.str[0] == ',')
+      {
+        rd.next();
+        tok = &rd.peek();
+        continue;
+      }
+    }
+  }
+
+  inline void skip_key(reader& rd)
+  {
+    auto& tok = rd.peek();
+    switch (tok.type)
+    {
+    case token::t_string:
+    case token::t_int:
+    case token::t_uint:
+    case token::t_number:
+    {
+      rd.next();
+      return;
+    }
+    }
+    rd.error("invalid json document!");
+  }
+
+  inline void skip_object(reader& rd)
+  {
+    auto tok = &rd.peek();
+    while (tok->str.str[0] != '}')
+    {
+      skip_key(rd);
+      rd.next();
+      tok = &rd.peek();
+      if (tok->str.str[0] == ':')
+      {
+        skip(rd);
+        rd.next();
+        tok = &rd.peek();
+      }
+      else
+      {
+        rd.error("invalid json document!");
+      }
+      if (tok->str.str[0] == ',')
+      {
+        rd.next();
+        tok = &rd.peek();
+        continue;
+      }
+    }
+  }
+
+  template<typename head, typename... args>
+  inline int read_members(reader& rd, detail::string_ref const * member_ptr,
+    detail::string_ref const& member, size_t pos, head& h, args& ... args_);
+
+  inline int read_members(reader&, detail::string_ref const*,
+    detail::string_ref const&, size_t);
+
+  template<typename head, typename... args>
+  struct read_members_impl
+  {
+    static inline int read(reader& rd, detail::string_ref const * member_ptr,
+      detail::string_ref const& member, size_t pos, head& val, args& ... args_)
+    {
+      if (member_ptr[pos] == member)
+      {
+        json_impl<head>::read(rd, val);
+        return 1;
+      }
+      if (sizeof...(args))
+        return read_members(rd, member_ptr, member, pos + 1, args_...);
+      return 0;
+    }
+  };
+
+  template<typename head, typename... args>
+  inline int read_members(reader& rd, detail::string_ref const * member_ptr,
+    detail::string_ref const& member, size_t pos, head& h, args& ... args_)
+  {
+    return read_members_impl<head, args...>::read(rd, member_ptr,
+      member, pos, h, args_...);
+  }
+
+  inline int read_members(reader&, detail::string_ref const*,
+    detail::string_ref const&, size_t)
+  {
+    return 0;
+  }
+
+  template<typename ty>
+  inline void load_from_buff(ty& val, char * buff, size_t len = -1)
+  {
+    reader rd(buff, len);
+    json_impl<ty>::read(rd, val);
+  }
+
+  template<typename ty>
+  inline void load_from_file(ty& val, char * filename)
+  {
+    std::FILE * f = std::fopen(filename, "r");
+    if (nullptr == f)
+    {
+      throw std::logic_error("can't open file");
+    }
+    std::fseek(f, 0, SEEK_END);
+    auto sz = std::ftell(f);
+    std::fseek(f, 0, SEEK_SET);
+    char * buffer = new char[sz];
+    std::unique_ptr<char> buf_ptr = buffer;
+    reader rd(buffer, sz);
+    json_impl<ty>::read(rd, val);
+  }
+
+  template<typename write_ty, typename head, typename... args>
+  inline void write_members(write_ty& wt, detail::string_ref const * member_ptr,
+    size_t pos, head& h, args& ... args_);
+
+  template<typename write_ty>
+  inline void write_members(write_ty&, detail::string_ref *, size_t);
+
+  template<typename write_ty, typename head, typename... args>
+  struct write_members_impl
+  {
+    static inline void write(write_ty& wt, detail::string_ref const * member_ptr,
+      size_t pos, head const& val, args const& ... args_)
+    {
+      wt.write_str(member_ptr[pos].str, member_ptr[pos].len);
+      wt.putc(':');
+      json_impl<head>::write(wt, val);
+      if (sizeof...(args))
+      {
+        wt.putc(',');
+        write_members(wt, member_ptr, pos + 1, args_...);
+      }
+    }
+  };
+
+  template<typename write_ty, typename head, typename... args>
+  inline void write_members(write_ty& wt, detail::string_ref const* member_ptr,
+    size_t pos, head const& h, args& ... args_)
+  {
+    return write_members_impl<write_ty, head, args...>::write(wt, member_ptr,
+      pos, h, args_...);
+  }
+
+  template<typename write_ty>
+  inline void write_members(write_ty&, detail::string_ref const*, size_t)
+  {
     return;
   }
 
-  template<typename store_ty, typename ty>
-  inline void container_seq_write(store_ty& store_data, const ty& value)
+  template<typename ty, typename stream_ty, template <typename stream_ty> class write_tp = lite_write>
+  inline void save_to(stream_ty& ss, ty& val)
   {
-    store_data.write("[", 1);
-    std::size_t len = 0;
-    for (typename ty::const_iterator i = value.begin(); i != value.end(); ++i, ++len)
-    {
-      write(store_data, *i);
-      if (len < value.size() - 1)
-      {
-        store_data.write(",", 1);
-      }
-    }
-    store_data.write("]", 1);
+    write_tp<stream_ty> wt(ss);
+    json_impl<ty>::write(wt, val);
   }
 
-  template<typename ty, typename alloc_ty, typename jsonvalue_type>
-  inline void read(const jsonvalue_type& json_value, ::std::list<ty, alloc_ty>& value)
+  template<typename ty, typename stream_ty = ajson_file_stream, template <typename stream_ty> class write_tp = lite_write>
+  inline void save_to_file(ty& val, char const * filename)
   {
-    container_seq_read(json_value, value);
+    stream_ty fs(filename);
+    save_to < ty, stream_ty, write_tp>(fs, val);
   }
-
-  template<typename ty, typename alloc_ty, typename jsonvalue_type>
-  inline void read(const jsonvalue_type& json_value, ::std::deque<ty, alloc_ty>& value)
-  {
-    container_seq_read(json_value, value);
-  }
-
-  template<typename ty, typename alloc_ty, typename jsonvalue_type>
-  inline void read(const jsonvalue_type& json_value, ::std::vector<ty, alloc_ty>& value)
-  {
-    container_seq_read(json_value, value);
-  }
-
-  template<typename store_ty, typename ty, typename alloc_ty>
-  inline void write(store_ty& store, const ::std::list<ty, alloc_ty>& value)
-  {
-    container_seq_write(store, value);
-  }
-
-  template<typename store_ty, typename ty, typename alloc_ty>
-  inline void write(store_ty& store, const ::std::deque<ty, alloc_ty>& value)
-  {
-    container_seq_write(store, value);
-  }
-
-  template<typename store_ty, typename ty, typename alloc_ty>
-  inline void write(store_ty& store, const ::std::vector<ty, alloc_ty>& value)
-  {
-    container_seq_write(store, value);
-  }
-
-  template<typename ty, typename jsonvalue_type>
-  inline void ajson_read(const jsonvalue_type& json_value, ty& value)
-  {
-    read(json_value, value);
-  }
-
-  template<typename store_ty, typename ty>
-  inline void ajson_write(store_ty& store, const ty& value)
-  {
-    write(store, value);
-  }
-
-  template<typename ty, typename jsonvalue_type>
-  inline void load_from_nodex(ty& value, const jsonvalue_type& node)
-  {
-    ajson_read(node, value);
-  }
-
-  template<typename ty, typename string_ty>
-  inline bool load_from_buffx(ty& value, const char * data, string_ty& error_message)
-  {
-    ::rapidjson::Document document;
-    document.Parse<0>(data);
-    if (document.HasParseError())
-    {
-      char * error_offset = (char *)data + document.GetErrorOffset();
-      ::std::size_t len = strlen(error_offset);
-      if (len > 50)
-      {
-        len = 50;
-      }
-      char error_str[256];
-#ifdef _MSC_VER
-      ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
-#else
-      ::std::size_t offset = ::sprintf(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
-#endif
-      memcpy(error_str + offset, error_offset, len);
-      error_str[offset + len] = 0;
-      error_message = error_str;
-      return false;
-    }
-    ::rapidjson::Document::ValueType& json_value = document;
-    ajson_read(json_value, value);
-    return true;
-  }
-
-  template<typename stroe_ty, typename ty>
-  inline bool save_to_buff(stroe_ty& buff, const ty& value)
-  {
-    ajson_write(buff, value);
-    buff.write("\0", 1);
-    return true;
-  }
-
-  template<typename ty, typename string_ty>
-  inline bool load_from_file(ty& value, char * filename, string_ty& error_message)
-  {
-    ::rapidjson::Document document;
-    char readBuffer[4096];
-    FILE * fd;
-    if (0 != ::fopen_s(&fd, filename, "r"))
-    {
-      error_message = "open file error.";
-      return false;
-    }
-    ::rapidjson::FileReadStream is(fd, readBuffer, sizeof(readBuffer));
-    document.ParseStream<0, ::rapidjson::UTF8<>>(is);
-    if (document.HasParseError())
-    {
-      char error_str[256];
-#ifdef _MSC_VER
-      ::std::size_t offset = ::sprintf_s(error_str, "error occurred %s near ", ::rapidjson::GetParseError_En(document.GetParseError()));
-#else
-      ::std::size_t offset = ::sprintf(error_str, "error occurred %s near  ", ::rapidjson::GetParseError_En(document.GetParseError()));
-#endif
-      fseek(fd, (int)document.GetErrorOffset(), SEEK_SET);
-      offset += fread(error_str + offset, 1, 50, fd);
-      error_str[offset] = 0;
-      error_message = error_str;
-      ::fclose(fd);
-      return false;
-    }
-    ::fclose(fd);
-    ::rapidjson::Document::ValueType& json_value = document;
-    ajson_read(json_value, value);
-    return true;
-  }
-
-  template<typename ty, typename string_ty>
-  inline bool save_to_file(ty& value, const char * filename, string_ty& error_message)
-  {
-    ajson_file_stream outf(filename);
-    if (!outf.bad())
-    {
-      ajson_write<ty, ajson_file_stream>(outf, value);
-    }
-    else
-    {
-      error_message = "error open file";
-      return false;
-    }
-    return true;
-  }
-
 }
 
-#define AJSON_READ_MEMBER( r , v , elem ) \
-	member_ptr = json_value.FindMember( BOOST_DO_STRINGIZE(elem) );\
-	if ( member_ptr != json_value.MemberEnd() )\
-    	{\
-		::ajson::read( member_ptr->value , value.elem);\
-    	}
-
-#define AJSON_WRITE_MEMBER( r ,v , elem ) \
-	member_name = BOOST_DO_STRINGIZE(elem);\
-	store_data.write("\"",1); store_data.write(member_name,strlen(member_name));store_data.write("\"",1);store_data.write(":",1);\
-	::ajson::write(store_data , value.elem);\
-	store_data.write(",",1);\
-	++member_count;
-
-#define AJSON(TYPE, MEMBERS)\
-namespace ajson\
-{\
-  template<typename jsonvalue_type>\
-	inline void read(const jsonvalue_type& json_value , TYPE& value)\
-	{\
-		jsonvalue_type::ConstMemberIterator member_ptr;\
-		BOOST_PP_SEQ_FOR_EACH( AJSON_READ_MEMBER , 0 , MEMBERS ) \
-		return;\
-	}\
-	template <typename store_ty>\
-	inline void write(store_ty& store_data , const TYPE& value)\
-	{\
-		char * member_name = NULL;\
-		int member_count = 0;\
-		store_data.write("{",1);\
-		BOOST_PP_SEQ_FOR_EACH( AJSON_WRITE_MEMBER , 0 , MEMBERS ) \
-		if(member_count){ store_data.seekp(-1,std::ios::cur); }\
-		store_data.write("}",1);\
-		return;\
-	}\
+#define AJSON(TYPE,...) \
+namespace ajson{\
+template<> \
+struct json_impl < TYPE , void > \
+{ \
+  static inline detail::filed_list& this_filed_list() \
+  {\
+    static auto fields = detail::split_fields(STRINGFY_LIST(__VA_ARGS__)); \
+    return fields; \
+  }\
+  static inline void read(reader& rd, TYPE& v) \
+  { \
+    auto& fields = this_filed_list(); \
+    if (rd.expect('{') == false){ rd.error("read object must start with {!"); } \
+    rd.next(); \
+    if (rd.expect('}')) \
+      return; \
+    auto mber = rd.peek(); \
+    size_t pos = 0; \
+    do \
+        { \
+      if (mber.type != token::t_string){ rd.error("object key must be string"); } \
+      rd.next(); \
+      if (rd.expect(':') == false){ rd.error("invalid json document!"); } \
+      rd.next(); \
+      if (read_members(rd, &fields[0], mber.str, 0,__VA_ARGS__) == 0) \
+            { \
+        skip(rd); \
+            } \
+      if (rd.expect('}')) \
+            { \
+        rd.next(); \
+        return; \
+            } \
+            else if (rd.expect(',')) \
+      { \
+        rd.next(); \
+        mber = rd.peek(); \
+        continue; \
+      } \
+      rd.error("invalid json document!"); \
+        } while (true); \
+  } \
+  template<typename write_ty>\
+  static inline void write(write_ty& wt, TYPE const& v)\
+  {\
+    auto& fields = this_filed_list(); \
+    wt.putc('{');\
+    ::ajson::write_members(wt, &fields[0], 0,__VA_ARGS__); \
+    wt.putc('}');\
+  }\
+};\
 }
-
-#endif

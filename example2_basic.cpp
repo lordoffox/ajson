@@ -5,7 +5,7 @@
 #include "ajson.hpp"
 
 using namespace std;
-using namespace boost::ajson;
+using namespace ajson;
 
 struct Education
 {
@@ -27,8 +27,8 @@ struct Person
 	vector<Education> Educations;
 };
 
-AJSON(Education,(School)(GPA))
-AJSON(Person,(Name)(Age)(Educations))
+AJSON(Education,v.School , v.GPA)
+AJSON(Person, v.Name , v.Age , v.Educations)
 
 int main(int argc, char * argv[])
 {
@@ -36,9 +36,9 @@ int main(int argc, char * argv[])
 	person.Name = "Bob";
 	person.Age = 28;
 	person.Educations.push_back(Education("MIT",600));
-	store_buffer json_buff;
-	save_to_buff(person,json_buff);
-	std::cout << json_buff.data() << std::endl;
+	string_stream ss;
+	save_to(ss,person);
+	std::cout << ss.str() << std::endl;
 	cin.get();
 	return 0;
 }

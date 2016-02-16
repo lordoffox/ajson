@@ -1,9 +1,28 @@
 ajson
 =====
 
-a utility for orm C++ and json dom。
+a utility for serialize C++ and json.
 
-什么是AJSON？
+动机：
+=====
+为什么要设计ajson？
+
+在工作中经常有这样的需求，获得一段json编码的文本，将它解析为dom对象（比如rapidjson）。
+
+然后读取各节点的值，为了方便，经常将其保存到某个数据结构。
+
+然后这个dom就不需要了，这里dom的解析和构建就感觉到了浪费。
+
+也有反过来的情况，将一个C++结构体，序列化到dom，然后将dom再次序列化到文本。
+
+再次，感觉到了dom的浪费。
+
+这时，我希望能有一个像javescript那样方便的将json文本到数据结构直接方便的转换。
+
+于是ajson就诞生了。
+
+简介
+=====
 
 ------------------------------------------------------------------
 
@@ -16,23 +35,102 @@ struct Person
   
 };
 
-
-AJSON(Person , (Name)(Age))
+AJSON(Person , v.Name , v.Age))
 
 Person obj;
 
+char * json= "{	\"Name\" : \"Boo\",	\"Age\" : 28}";
 
-char * data = ""
-"{\n"
-"	\"Name\" : \"Boo\","
-"	\"Age\" : 28"
-"}";
+ajson::load_from_buff(obj,json);
 
-load_from_buff(obj,data);
+以上代码解释了什么是AJSON,AJSON还支持stl的顺序容器。
 
-以上代码解释了什么是AJSON,AJSON还支持stl的顺序容器
+再来个复杂点的例子
+
+enum PhoneType
+
+{
+
+  MOBILE = 0,
+
+  HOME = 1,
+
+  WORK = 2
+
+};
+
+struct PhoneNumber
+
+{
+  std::string number;
+
+  PhoneType   type = MOBILE;
+
+  PhoneNumber(std::string const& number_  = "", PhoneType type_ = MOBILE)
+
+    :number(number_),type(type_)
+
+  {}
+
+};
+
+struct Person
+
+{
+
+  std::string name;
+
+  int32_t     id;
+
+  std::string mail;
+
+  std::vector<PhoneNumber> phones;
+
+  Person(std::string name_  = "" , int32_t id_  = 0, std::string mail_ = "")
+
+    :name(name_),id(id_),mail(mail_)
+
+  {}
+
+};
+
+struct AddressBook
+
+{
+
+  std::vector<Person> peoples;
+
+};
+
+AJSON(PhoneNumber, v.number, v.type);
+
+AJSON(Person, v.name, v.id, v.mail, v.phones);
+
+AJSON(AddressBook, v.peoples);
+
+结构体支持嵌套，stl容器也支持嵌套。
 
 --------------------------------------------------------
+特点
+======
+ajson反序列化扫描的时候，直接将字面量类型同时解析，并将结果直接存入对应的数据结构字段。
+
+如此一来就不需要临时的DOM，减少了中间处理的工作以及内存的申请释放，大大提升了性能。
+
+使用方式简单，只要定义相应的宏AJSON，便可方便的序列化/反序列化操作。
+
+依赖小，完全不依赖第三方库，只有一个头文件，省去了编译的麻烦。
+
+要点
+======
+如果json内部附带了转义符，ajson会改动原始文本来避免新申请内存。
+
+如果不希望原始文本被修改，请创建一份新的拷贝。
+
+由于ajson全是内存操作，文件读取操作时，将会全部读入内存，所以不适合大文件操作。
+
+其他
+======
 
 为什么要选择json而不是xml？
 
@@ -45,39 +143,8 @@ load_from_buff(obj,data);
 
 ---------------------------------------------------------
 
-AJSON还有什么比较酷的地方吗
+AJSON完全免费，没有任何限制，使用boost的授权方式。
 
-因为有时候有这样一种需求，一个C++的Type会有多种ORM方式，
-比如Person可以有(Name)(Age),(Name),(Age)这3种方式存到不同的json文件中。
-AJSON的本身是带有tag机制的
-
-AJSONX(Person , (Name)(Age),0)
-
-load_from_buffx<0>(obj,data);
-
-AJSONX(Person , (Name),1)
-
-load_from_buffx<1>(obj,data);
-
-AJSONX(Person , (Age),2)
-
-load_from_buffx<2>(obj,data);
-
-每个tag编号就是一组编制，这样你可以给你的系统分配多种ORM方案，
-更加灵活，默认的AJSON和load_from_buff其实就是用的0号tag，
-这样不需要分组的用户也不会受到干扰。
-
------------------------------------------------------------
-
-AJSON就一个ajson.hpp头文件，能工作吗，不忽悠人吗？
-
-虽然就ajson.hpp这么一个头文件，但是确实能工作哦，
-不过，他还依赖rapidjson和boost.proprocessor，
-lexical_cast都只是头文件依赖，你无需配置链接库。
-
---------------------------------------------------------------
-
-用AJSON要掏钱吗，要共享源代码吗？
-
-AJSON完全免费，不用共享源代码，不用传播出处，使用boost的授权方式。
-
+0.2.0版本
+=====
+相对于0.1.x版本，ajson没有功能上的增加，主要的改动是去掉了对rapidjson和boost的依赖，完全独立了。
