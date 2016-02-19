@@ -5,7 +5,6 @@
 #include <exception>
 #include <deque>
 #include <list>
-#include <ios>
 #include <map>
 #include <memory>
 #include <queue>
@@ -895,28 +894,9 @@ namespace ajson
 
     inline bool bad(){ return m_status != good; }
 
-    inline int seekp(int offset, int seek_dir)
+    inline int seekp(size_t offset, int seek_dir)
     {
-      switch (seek_dir)
-      {
-      case std::ios::beg:
-      {
-        if (offset < 0)
-        {
-          offset = 0;
-        }
-        return std::fseek(this->m_f, offset, SEEK_SET);
-      }
-      case std::ios::cur:
-      {
-        return std::fseek(this->m_f, offset, SEEK_CUR);
-      }
-      case std::ios::end:
-      {
-        return std::fseek(this->m_f, offset, SEEK_END);
-      }
-      }
-      return 0;
+      return std::fseek(this->m_f, offset, seek_dir);
     }
 
     inline void clear()
