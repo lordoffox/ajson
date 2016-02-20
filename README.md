@@ -15,9 +15,9 @@ a utility for serialize C++ and json.
 
 也有反过来的情况，将一个C++结构体，序列化到dom，然后将dom再次序列化到文本。
 
-再次，感觉到了dom的浪费。
+再次，感觉到了dom的浪费，能跳过DOM这层吗？
 
-这时，我希望能有一个像javescript那样方便的将json文本到数据结构直接方便的转换。
+这时，我希望能有一个像javascript那样方便的将json文本到数据结构直接方便的转换。
 
 于是ajson就诞生了。
 
