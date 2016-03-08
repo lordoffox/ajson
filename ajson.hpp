@@ -1584,7 +1584,7 @@ namespace ajson
     auto sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
     char * buffer = new char[sz];
-    std::unique_ptr<char> buf_ptr = buffer;
+    std::unique_ptr<char> buf_ptr(buffer);
     std::fread(buffer, sz, 1, f);
     reader rd(buffer, sz);
     json_impl<ty>::read(rd, val);
