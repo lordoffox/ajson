@@ -1587,6 +1587,7 @@ namespace ajson
     std::unique_ptr<char> buf_ptr = buffer;
     reader rd(buffer, sz);
     json_impl<ty>::read(rd, val);
+    std::fclose(f);
   }
 
   template<typename write_ty, typename head, typename... args>
