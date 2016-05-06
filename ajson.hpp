@@ -151,6 +151,21 @@ namespace ajson
       is_template_instant_of<std::list, T>::value ||
       is_template_instant_of<std::vector, T>::value
     > {};
+
+    template<typename T>
+    struct array_length
+    {
+      enum{
+        value = 0
+      };
+    };
+    template<typename T , size_t N>
+    struct array_length<T[N]>
+    {
+      enum{
+        value = N
+      };
+    };
   }
 
   struct token
@@ -171,8 +186,6 @@ namespace ajson
       uint64_t  u64;
       double    d64;
     } value;
-    double decimal = 0.1;
-    inline void reset(){ decimal = 0.1; }
   };
 
 #ifdef _MSC_VER
@@ -200,6 +213,8 @@ namespace ajson
     size_t  cur_offset_ = 0;
     bool    end_mark_ = false;
     char  * ptr_ = nullptr;
+    double decimal = 0.1;
+    inline void decimal_reset(){ decimal = 0.1; }
 
     inline char read() const
     {
@@ -509,8 +524,8 @@ namespace ajson
           }
           else if (cur_tok_.type == token::t_number)
           {
-            cur_tok_.value.d64 += cur_tok_.decimal * (c - '0');
-            cur_tok_.decimal *= 0.1;
+            cur_tok_.value.d64 += decimal * (c - '0');
+            decimal *= 0.1;
           }
           break;
         }
@@ -520,13 +535,13 @@ namespace ajson
           {
             cur_tok_.type = token::t_number;
             cur_tok_.value.d64 = (double)cur_tok_.value.i64;
-            cur_tok_.reset();
+            decimal_reset();
           }
           else if (cur_tok_.type == token::t_uint)
           {
             cur_tok_.type = token::t_number;
             cur_tok_.value.d64 = (double)cur_tok_.value.u64;
-            cur_tok_.reset();
+            decimal_reset();
           }
           else if (cur_tok_.type == token::t_number)
           {
@@ -1293,6 +1308,48 @@ namespace ajson
     static inline void write(write_ty& wt, ty const& val)
     {
       wt.write_str(val.data(), val.length());
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, ty const& val)
+    {
+      write<write_ty>(wt, val);
+    }
+  };
+
+  template<typename ty>
+  struct json_impl < ty,
+    typename std::enable_if <std::is_array<ty>::value>::type >
+  {
+    enum{ N = detail::array_length<ty>::value};
+    static inline void read(reader& rd, char * val)
+    {
+      auto& tok = rd.peek();
+      if (tok.type == token::t_string)
+      {
+        int len = tok.str.len;
+        if (len > N)
+          len = N;
+        std::memcpy(val, tok.str.str, len);
+        if (len < N)
+          val[len] = 0;
+      }
+      else
+      {
+        rd.error("not a valid string.");
+      }
+      rd.next();
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, const char * val)
+    {
+      int i = 0;
+      for (; i < N; ++i)
+      {
+        if(val[i] == 0)
+          break;
+      }
+      wt.write_str(val, i);
     }
 
     template<typename write_ty>
