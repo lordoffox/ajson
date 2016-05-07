@@ -151,21 +151,6 @@ namespace ajson
       is_template_instant_of<std::list, T>::value ||
       is_template_instant_of<std::vector, T>::value
     > {};
-
-    template<typename T>
-    struct array_length
-    {
-      enum{
-        value = 0
-      };
-    };
-    template<typename T , size_t N>
-    struct array_length<T[N]>
-    {
-      enum{
-        value = N
-      };
-    };
   }
 
   struct token
@@ -960,6 +945,8 @@ namespace ajson
       while (ptr < end)
       {
         const char c = *ptr;
+        if(c==0)
+          break;
         ++ptr;
         if (escape[(unsigned char)c])
         {
@@ -1317,11 +1304,9 @@ namespace ajson
     }
   };
 
-  template<typename ty>
-  struct json_impl < ty,
-    typename std::enable_if <std::is_array<ty>::value>::type >
+  template<typename size_t N>
+  struct json_impl <char[N]>
   {
-    enum{ N = detail::array_length<ty>::value};
     static inline void read(reader& rd, char * val)
     {
       auto& tok = rd.peek();
@@ -1340,20 +1325,19 @@ namespace ajson
       }
       rd.next();
     }
+  };
+
+  template<typename size_t N>
+  struct json_impl <const char[N] >
+  {
     template<typename write_ty>
     static inline void write(write_ty& wt, const char * val)
     {
-      int i = 0;
-      for (; i < N; ++i)
-      {
-        if(val[i] == 0)
-          break;
-      }
-      wt.write_str(val, i);
+      wt.write_str(val, N);
     }
 
     template<typename write_ty>
-    static inline void write_key(write_ty& wt, ty const& val)
+    static inline void write_key(write_ty& wt, const char* val)
     {
       write<write_ty>(wt, val);
     }
