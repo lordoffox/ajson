@@ -950,16 +950,30 @@ namespace ajson
         ++ptr;
         if (escape[(unsigned char)c])
         {
-          s_.putc('\\');
-          auto ec = escape[(unsigned char)c];
-          s_.putc(ec);
-          if (ec == 'u')
+          char buff[6] = { '\\', '0' };
+          size_t len = 2;
+          buff[1] = escape[(unsigned char)c];
+          if (buff[1] == 'u')
           {
-            char buff[4] = { '0', '0' };
-            buff[2] = (hex_table[((unsigned char)c) >> 4]);
-            buff[3] = (hex_table[((unsigned char)c) & 0xF]);
-            s_.write(buff, 4);
+            if(ptr < end)
+            {
+              buff[2] = (hex_table[((unsigned char)c) >> 4]);
+              buff[3] = (hex_table[((unsigned char)c) & 0xF]);
+              const char c1 = *ptr;
+              ++ptr;
+              buff[4] = (hex_table[((unsigned char)c1) >> 4]);
+              buff[5] = (hex_table[((unsigned char)c1) & 0xF]);
+            }
+            else
+            {
+              buff[2] = '0';
+              buff[3] = '0';
+              buff[4] = (hex_table[((unsigned char)c) >> 4]);
+              buff[5] = (hex_table[((unsigned char)c) & 0xF]);
+            }
+            len = 6;
           }
+          s_.write(buff, len);
         }
         else
         {
@@ -1498,6 +1512,7 @@ namespace ajson
         skip_object(rd);
         return;
       }
+      return;
     }
     case token::t_end:
     {
@@ -1513,7 +1528,6 @@ namespace ajson
     while (tok->str.str[0] != ']')
     {
       skip(rd);
-      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ',')
       {
@@ -1521,7 +1535,12 @@ namespace ajson
         tok = &rd.peek();
         continue;
       }
+      else if (tok->str.str[0] != ']')
+      {
+        rd.error("invalid json document!");
+      }
     }
+    rd.next();
   }
 
   inline void skip_key(reader& rd)
@@ -1547,11 +1566,9 @@ namespace ajson
     while (tok->str.str[0] != '}')
     {
       skip_key(rd);
-      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ':')
       {
-        skip(rd);
         rd.next();
         tok = &rd.peek();
       }
@@ -1565,7 +1582,12 @@ namespace ajson
         tok = &rd.peek();
         continue;
       }
+      else if (tok->str.str[0] != '}')
+      {
+        rd.error("invalid json document!");
+      }
     }
+    rd.next();
   }
 
   template<typename head, typename... args>
@@ -1614,7 +1636,7 @@ namespace ajson
   }
 
   template<typename ty>
-  inline void load_from_file(ty& val, char * filename)
+  inline void load_from_file(ty& val,const char * filename)
   {
     std::FILE * f = std::fopen(filename, "r");
     if (nullptr == f)
