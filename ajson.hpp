@@ -195,9 +195,7 @@ namespace ajson
     size_t  cur_col_ = 0;
     size_t  cur_line_ = 0;
     size_t  len_ = 0;
-    size_t  cur_read_offset_ = 0;
-    size_t  cur_write_offset_ = 0;
-    size_t  esacpe_count_ = 0;
+    size_t  cur_offset_ = 0;
     bool    end_mark_ = false;
     char  * ptr_ = nullptr;
     double decimal = 0.1;
@@ -207,18 +205,18 @@ namespace ajson
     {
       if (end_mark_)
         return 0;
-      return ptr_[cur_read_offset_];
+      return ptr_[cur_offset_];
     }
 
     inline void take()
     {
       if (end_mark_ == false)
       {
-        ++cur_read_offset_;
-        char v = ptr_[cur_read_offset_];
+        ++cur_offset_;
+        char v = ptr_[cur_offset_];
         if (v != '\r')
           ++cur_col_;
-        if (len_ > 0 && cur_read_offset_ >= len_)
+        if (len_ > 0 && cur_offset_ >= len_)
         {
           end_mark_ = true;
         }
@@ -249,7 +247,7 @@ namespace ajson
     {
       if (count == 0)
         return;
-      ptr_[cur_read_offset_ - count] = c;
+      ptr_[cur_offset_ - count] = c;
     }
 
     inline char char_to_hex(char v)
@@ -295,20 +293,17 @@ namespace ajson
       if (utf1 < 0x80)
       {
         fill_escape_char(esc_count, (char)utf1);
-        esc_count -= 1;
       }
       else if (utf1 < 0x800)
       {
         fill_escape_char(esc_count, (char)(0xC0 | ((utf1 >> 6) & 0xFF)));
         fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 & 0x3F))));
-        esc_count -= 2;
       }
       else if (utf1 < 0x80000)
       {
         fill_escape_char(esc_count, (char)(0xE0 | ((utf1 >> 12) & 0xFF)));
         fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
         fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 & 0x3F))));
-        esc_count -= 3;
       }
       else
       {
@@ -320,14 +315,13 @@ namespace ajson
         fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 12) & 0x3F)));
         fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
         fill_escape_char(esc_count - 3, (char)(0x80 | ((utf1 & 0x3F))));
-        esc_count -= 4;
       }
     }
 
     void parser_quote_string()
     {
       take();
-      cur_tok_.str.str = ptr_ + cur_read_offset_;
+      cur_tok_.str.str = ptr_ + cur_offset_;
       auto c = read();
       size_t esc_count = 0;
       do
@@ -346,11 +340,6 @@ namespace ajson
           c = read();
           switch (c)
           {
-          case '\\':
-          {
-            c = '\\';
-            break;
-          }
           case 'b':
           {
             c = '\b';
@@ -384,7 +373,6 @@ namespace ajson
           {
             take();
             esacpe_utf8(esc_count);
-            c = read();
             continue;
           }
           default:
@@ -397,7 +385,7 @@ namespace ajson
         }
         case '"':
         {
-          cur_tok_.str.len = ptr_ + cur_read_offset_ - esc_count - cur_tok_.str.str;
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
           take();
           return;
         }
@@ -410,7 +398,7 @@ namespace ajson
 
     void parser_string()
     {
-      cur_tok_.str.str = ptr_ + cur_read_offset_;
+      cur_tok_.str.str = ptr_ + cur_offset_;
       take();
       auto c = read();
       size_t esc_count = 0;
@@ -479,7 +467,7 @@ namespace ajson
         case '{':
         case '}':
         {
-          cur_tok_.str.len = ptr_ + cur_read_offset_ - esc_count - cur_tok_.str.str;
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
           return;
         }
         }
@@ -491,7 +479,7 @@ namespace ajson
 
     void parser_number()
     {
-      cur_tok_.str.str = ptr_ + cur_read_offset_;
+      cur_tok_.str.str = ptr_ + cur_offset_;
       take();
       auto c = read();
       do
@@ -548,7 +536,7 @@ namespace ajson
         }
         default:
         {
-          cur_tok_.str.len = ptr_ + cur_read_offset_ - cur_tok_.str.str;
+          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
           return;
         }
         }
@@ -599,7 +587,7 @@ namespace ajson
       {
       case 0:
         cur_tok_.type = token::t_end;
-        cur_tok_.str.str = ptr_ + cur_read_offset_;
+        cur_tok_.str.str = ptr_ + cur_offset_;
         cur_tok_.str.len = 1;
         break;
       case '{':
@@ -610,7 +598,7 @@ namespace ajson
       case ',':
       {
         cur_tok_.type = token::t_ctrl;
-        cur_tok_.str.str = ptr_ + cur_read_offset_;
+        cur_tok_.str.str = ptr_ + cur_offset_;
         cur_tok_.str.len = 1;
         take();
         break;
@@ -939,128 +927,57 @@ namespace ajson
     inline void write_str(char const * str, size_t len)
     {
       static char const * hex_table = "0123456789ABCDEF";
-      typedef struct
-      {
-        unsigned int expected : 4,
-        seen : 4,
-             reserved : 24;
-      } state_t;
-      state_t shift_state = { 0, 0, 0 };
-      uint32_t result = 0;
+      static char const escape[256] = {
+#define Z16 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        //0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'b', 't', 'n', 'u', 'f', 'r', 'u', 'u', // 00
+        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', // 10
+        0, 0, '"', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20
+        Z16, Z16,																		// 30~4F
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\\', 0, 0, 0, // 50
+        Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16								// 60~FF
+#undef Z16
+      };
 
       s_.putc('"');
-
-
-      for (size_t i = 0; i < len; ++i)
+      char const * ptr = str;
+      char const * end = ptr + len;
+      while (ptr < end)
       {
-        unsigned char ch = (unsigned char)str[i];
-        if (shift_state.seen == 0)
+        const char c = *ptr;
+        if(c==0)
+          break;
+        ++ptr;
+        if (escape[(unsigned char)c])
         {
-          if ((ch & 0x80) == 0)
+          char buff[6] = { '\\', '0' };
+          size_t len = 2;
+          buff[1] = escape[(unsigned char)c];
+          if (buff[1] == 'u')
           {
-            switch (ch) {
-            case '\"': s_.write("\\\"",2); break;
-            case '\\': s_.write("\\\\",2); break;
-            case '\b': s_.write("\\b",2); break;
-            case '\f': s_.write("\\f",2); break;
-            case '\n': s_.write("\\n",2); break;
-            case '\r': s_.write("\\r",2); break;
-            case '\t': s_.write("\\t",2); break;
-            default:
-              s_.putc(ch);
-              break;
-            }
-          }
-          else if ((ch & 0xe0) == 0xc0)
-          {
-            // 2 byte
-            result = ch & 0x1f;
-            shift_state.expected = 2;
-            shift_state.seen = 1;
-          }
-          else if ((ch & 0xf0) == 0xe0)
-          {
-            // 3 byte
-            result = ch & 0x0f;
-            shift_state.expected = 3;
-            shift_state.seen = 1;
-          }
-          else if ((ch & 0xf8) == 0xf0)
-          {
-            // 4 byte
-            result = ch & 0x07;
-            shift_state.expected = 4;
-            shift_state.seen = 1;
-          }
-          else if ((ch & 0xfc) == 0xf8)
-          {
-            // 5 byte
-            throw std::logic_error("invalid_utf8_string"); // Restricted by RFC 3629
-          }
-          else if ((ch & 0xfe) == 0xfc)
-          {
-            // 6 byte
-            throw std::logic_error("invalid_utf8_string"); // Restricted by RFC 3629
-          }
-          else
-          {
-            throw std::logic_error("invalid_utf8_string"); // should never happen
-          }
-        }
-        else if (shift_state.seen < shift_state.expected)
-        {
-          char buff[6] = { '\\', 'u' };
-          if ((ch & 0xc0) == 0x80) {
-            result <<= 6;
-            result |= ch & 0x3f;
-            // increment the shift state
-            ++shift_state.seen;
-            if (shift_state.seen == shift_state.expected)
+            if(ptr < end)
             {
-              // done with this character
-              if (result < 0xd800 || (result >= 0xe000 && result < 0x10000))
-              {
-                ch = result >> 8;
-                buff[2] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[3] = (hex_table[((unsigned char)ch) & 0xF]);
-                ch = result & 0xff;
-                buff[4] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[5] = (hex_table[((unsigned char)ch) & 0xF]);
-                s_.write(buff, 6);
-              }
-              else
-              {
-                result = (result - 0x10000);
-                auto r1 = 0xd800 + ((result >> 10) & 0x3ff);
-                buff[2] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[3] = (hex_table[((unsigned char)ch) & 0xF]);
-                ch = r1 & 0xff;
-                buff[4] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[5] = (hex_table[((unsigned char)ch) & 0xF]);
-                s_.write(buff, 6);
-
-                r1 = 0xdc00 + (result & 0x3ff);
-                buff[2] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[3] = (hex_table[((unsigned char)ch) & 0xF]);
-                ch = r1 & 0xff;
-                buff[4] = (hex_table[((unsigned char)ch) >> 4]);
-                buff[5] = (hex_table[((unsigned char)ch) & 0xF]);
-                s_.write(buff, 6);
-              }
-
-              shift_state.seen = 0;
-              shift_state.expected = 0;
-              result = 0;
+              buff[2] = (hex_table[((unsigned char)c) >> 4]);
+              buff[3] = (hex_table[((unsigned char)c) & 0xF]);
+              const char c1 = *ptr;
+              ++ptr;
+              buff[4] = (hex_table[((unsigned char)c1) >> 4]);
+              buff[5] = (hex_table[((unsigned char)c1) & 0xF]);
             }
+            else
+            {
+              buff[2] = '0';
+              buff[3] = '0';
+              buff[4] = (hex_table[((unsigned char)c) >> 4]);
+              buff[5] = (hex_table[((unsigned char)c) & 0xF]);
+            }
+            len = 6;
           }
-          else
-          {
-            throw std::logic_error("invalid_utf8_string"); // should never happen
-          }
+          s_.write(buff, len);
         }
         else
         {
-          throw std::logic_error("invalid_utf8_string"); // should never happen
+          s_.putc(c);
         }
       }
       s_.putc('"');
@@ -1595,7 +1512,6 @@ namespace ajson
         skip_object(rd);
         return;
       }
-      return;
     }
     case token::t_end:
     {
@@ -1611,6 +1527,7 @@ namespace ajson
     while (tok->str.str[0] != ']')
     {
       skip(rd);
+      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ',')
       {
@@ -1618,12 +1535,7 @@ namespace ajson
         tok = &rd.peek();
         continue;
       }
-      else if (tok->str.str[0] != ']')
-      {
-        rd.error("invalid json document!");
-      }
     }
-    rd.next();
   }
 
   inline void skip_key(reader& rd)
@@ -1649,9 +1561,11 @@ namespace ajson
     while (tok->str.str[0] != '}')
     {
       skip_key(rd);
+      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ':')
       {
+        skip(rd);
         rd.next();
         tok = &rd.peek();
       }
@@ -1665,12 +1579,7 @@ namespace ajson
         tok = &rd.peek();
         continue;
       }
-      else if (tok->str.str[0] != '}')
-      {
-        rd.error("invalid json document!");
-      }
     }
-    rd.next();
   }
 
   template<typename head, typename... args>
@@ -1719,7 +1628,7 @@ namespace ajson
   }
 
   template<typename ty>
-  inline void load_from_file(ty& val,const char * filename)
+  inline void load_from_file(ty& val, char * filename)
   {
     std::FILE * f = std::fopen(filename, "r");
     if (nullptr == f)
