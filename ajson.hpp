@@ -1630,12 +1630,23 @@ namespace ajson
   template<typename ty>
   inline void load_from_file(ty& val, char * filename)
   {
+    struct file_guard
+    {
+      std::FILE * f_;
+      file_guard(std::FILE * f):f_(f){}
+      ~file_guard()
+      {
+        if (f_)
+          std::fclose(f_);
+      }
+    };
     std::FILE * f = std::fopen(filename, "rb");
     if (nullptr == f)
     {
       std::string errmsg = "can't open file:";
       throw std::logic_error( errmsg + filename);
     }
+    file_guard fg(f);
     std::fseek(f, 0, SEEK_END);
     auto sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
@@ -1644,7 +1655,6 @@ namespace ajson
     std::fread(buffer, sz, 1, f);
     reader rd(buffer, sz);
     json_impl<ty>::read(rd, val);
-    std::fclose(f);
   }
 
   template<typename write_ty, typename head, typename... args>
