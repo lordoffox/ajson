@@ -1633,7 +1633,8 @@ namespace ajson
     std::FILE * f = std::fopen(filename, "rb");
     if (nullptr == f)
     {
-      throw std::logic_error("can't open file");
+      std::string errmsg = "can't open file:";
+      throw std::logic_error( errmsg + filename);
     }
     std::fseek(f, 0, SEEK_END);
     auto sz = std::ftell(f);
