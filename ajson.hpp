@@ -1630,7 +1630,7 @@ namespace ajson
   template<typename ty>
   inline void load_from_file(ty& val, char * filename)
   {
-    std::FILE * f = std::fopen(filename, "r");
+    std::FILE * f = std::fopen(filename, "rb");
     if (nullptr == f)
     {
       throw std::logic_error("can't open file");
