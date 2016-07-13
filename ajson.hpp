@@ -564,12 +564,30 @@ namespace ajson
       next();
     }
 
+    static inline char* itoa_native(int val , char * buffer , int len)
+    {
+      buffer[len] = 0;
+      size_t pos = len - 1;
+      if (val == 0)
+      {
+        buffer[pos--] = '0';
+      }
+      while (val)
+      {
+        buffer[pos--] = (char)((val % 10) + '0');
+        val = val / 10;
+      }
+      ++pos;
+      return &buffer[0] + pos;
+    }
+
     inline void error(const char * message) const
     {
+      char buffer[20];
       std::string msg = "error at line :";
-      msg += cur_line_;
+      msg += itoa_native(cur_line_,buffer,19);
       msg += " col :";
-      msg += cur_col_;
+      msg += itoa_native(cur_col_, buffer, 19);
       msg += " msg:";
       msg += message;
       throw exception(msg);
