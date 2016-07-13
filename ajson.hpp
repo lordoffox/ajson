@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <stdlib.h>
 #include <cstring>
+#include <ios>
 
 #define STRINGFY_LIST(...) #__VA_ARGS__
 
@@ -1318,7 +1319,7 @@ namespace ajson
     }
   };
 
-  template<typename size_t N>
+  template<size_t N>
   struct json_impl <char[N]>
   {
     static inline void read(reader& rd, char * val)
@@ -1341,7 +1342,7 @@ namespace ajson
     }
   };
 
-  template<typename size_t N>
+  template<size_t N>
   struct json_impl <const char[N] >
   {
     template<typename write_ty>
@@ -1561,12 +1562,12 @@ namespace ajson
     while (tok->str.str[0] != '}')
     {
       skip_key(rd);
-      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ':')
       {
-        skip(rd);
         rd.next();
+        skip(rd);
+        //rd.next();
         tok = &rd.peek();
       }
       else
@@ -1580,6 +1581,7 @@ namespace ajson
         continue;
       }
     }
+    rd.next();
   }
 
   template<typename head, typename... args>
@@ -1730,28 +1732,28 @@ struct json_impl < TYPE , void > \
     auto mber = rd.peek(); \
     size_t pos = 0; \
     do \
-        { \
+    { \
       if (mber.type != token::t_string){ rd.error("object key must be string"); } \
       rd.next(); \
       if (rd.expect(':') == false){ rd.error("invalid json document!"); } \
       rd.next(); \
       if (read_members(rd, &fields[0], mber.str, 0,__VA_ARGS__) == 0) \
-            { \
+      { \
         skip(rd); \
-            } \
+      } \
       if (rd.expect('}')) \
-            { \
+      { \
         rd.next(); \
         return; \
-            } \
-            else if (rd.expect(',')) \
+      } \
+      else if (rd.expect(',')) \
       { \
         rd.next(); \
         mber = rd.peek(); \
         continue; \
       } \
       rd.error("invalid json document!"); \
-        } while (true); \
+    } while (true); \
   } \
   template<typename write_ty>\
   static inline void write(write_ty& wt, TYPE const& v)\
