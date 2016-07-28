@@ -1295,7 +1295,13 @@ namespace ajson
 #else
       gcvt(val, 62, buffer);
 #endif // MSVC
-      wt.write_liter(buffer, std::strlen(buffer));
+      size_t len = std::strlen(buffer);
+      if (buffer[len - 1] == '.')
+      {
+        buffer[len - 1] = '\0';
+        -- len;
+      }
+      wt.write_liter(buffer, len);
     }
 
     template<typename write_ty>
