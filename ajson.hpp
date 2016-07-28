@@ -1291,7 +1291,7 @@ namespace ajson
     {
       char buffer[64] = { 0 };
 #ifdef _MSC_VER
-      _gcvt_s(buffer, val, 62);
+      _gcvt_s(buffer, 63 , val, 8);
 #else
       gcvt(val, 62, buffer);
 #endif // MSVC
