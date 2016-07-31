@@ -1576,6 +1576,8 @@ namespace ajson
       rd.next();
       return;
     }
+    default:
+      break;
     }
     rd.error("invalid json document!");
   }
@@ -1721,14 +1723,14 @@ namespace ajson
     return;
   }
 
-  template<typename ty, typename stream_ty, template <typename stream_ty> class write_tp = lite_write>
+  template<typename ty, typename stream_ty, class write_tp = lite_write<stream_ty> >
   inline void save_to(stream_ty& ss, ty& val)
   {
     write_tp<stream_ty> wt(ss);
     json_impl<ty>::write(wt, val);
   }
 
-  template<typename ty, typename stream_ty = ajson_file_stream, template <typename stream_ty> class write_tp = lite_write>
+  template<typename ty, typename stream_ty = ajson_file_stream, class write_tp = lite_write<stream_ty> >
   inline void save_to_file(ty& val, char const * filename)
   {
     stream_ty fs(filename);
