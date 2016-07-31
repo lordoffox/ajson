@@ -1726,7 +1726,7 @@ namespace ajson
   template<typename ty, typename stream_ty, class write_tp = lite_write<stream_ty> >
   inline void save_to(stream_ty& ss, ty& val)
   {
-    write_tp<stream_ty> wt(ss);
+    write_tp wt(ss);
     json_impl<ty>::write(wt, val);
   }
 
