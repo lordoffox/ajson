@@ -564,7 +564,7 @@ namespace ajson
       next();
     }
 
-    static inline char* itoa_native(int val , char * buffer , int len)
+    static inline char* itoa_native(size_t val , char * buffer , int len)
     {
       buffer[len] = 0;
       size_t pos = len - 1;
@@ -1756,7 +1756,6 @@ struct json_impl < TYPE , void > \
     if (rd.expect('}')) \
       return; \
     auto mber = rd.peek(); \
-    size_t pos = 0; \
     do \
     { \
       if (mber.type != token::t_string){ rd.error("object key must be string"); } \
