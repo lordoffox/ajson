@@ -1410,7 +1410,7 @@ namespace ajson
       auto tok = &rd.peek();
       while (tok->str.str[0] != ']')
       {
-        emplace_back(val);
+        ::ajson::emplace_back(val);
         json_impl<typename ty::value_type>::read(rd, val.back());
         tok = &rd.peek();
         if (tok->str.str[0] == ',')
