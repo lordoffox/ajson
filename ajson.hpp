@@ -915,7 +915,7 @@ namespace ajson
 
     inline int seekp(size_t offset, int seek_dir)
     {
-      return std::fseek(this->m_f, offset, seek_dir);
+      return std::fseek(this->m_f, (long)offset, seek_dir);
     }
 
     inline void clear()
@@ -1351,7 +1351,7 @@ namespace ajson
       auto& tok = rd.peek();
       if (tok.type == token::t_string)
       {
-        int len = tok.str.len;
+        size_t len = tok.str.len;
         if (len > N)
           len = N;
         std::memcpy(val, tok.str.str, len);
