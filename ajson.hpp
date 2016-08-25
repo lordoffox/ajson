@@ -1656,7 +1656,7 @@ namespace ajson
   }
 
   template<typename ty>
-  inline void load_from_file(ty& val, char * filename)
+  inline void load_from_file(ty& val, const char * filename)
   {
     struct file_guard
     {
