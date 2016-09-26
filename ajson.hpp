@@ -564,7 +564,7 @@ namespace ajson
       next();
     }
 
-    static inline char* itoa_native(size_t val , char * buffer , int len)
+    static inline char* itoa_native(size_t val , char * buffer , size_t len)
     {
       buffer[len] = 0;
       size_t pos = len - 1;
@@ -1678,9 +1678,22 @@ namespace ajson
     std::fseek(f, 0, SEEK_END);
     auto sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
-    char * buffer = new char[sz];
-    std::unique_ptr<char> buf_ptr(buffer);
-    std::fread(buffer, sz, 1, f);
+
+    struct buffer_guard
+    {
+      char * buff_ = nullptr;
+      buffer_guard(char * buff) :buff_(buff){}
+      ~buffer_guard()
+      {
+        if (buff_)
+          delete [] buff_;
+      }
+    };
+
+    char * buffer = new char[sz+1];
+    buffer_guard bg(buffer);
+    std::fread(buffer, 1, sz, f);
+    buffer[sz] = 0;
     reader rd(buffer, sz);
     json_impl<ty>::read(rd, val);
   }
