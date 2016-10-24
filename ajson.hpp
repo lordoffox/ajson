@@ -1552,7 +1552,6 @@ namespace ajson
     while (tok->str.str[0] != ']')
     {
       skip(rd);
-      rd.next();
       tok = &rd.peek();
       if (tok->str.str[0] == ',')
       {
@@ -1561,6 +1560,7 @@ namespace ajson
         continue;
       }
     }
+    rd.next();
   }
 
   inline void skip_key(reader& rd)
