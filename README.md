@@ -1,5 +1,6 @@
 ajson
 =====
+0.2.0版本要求C++11的编译器
 
 a utility for serialize C++ and json.
 
