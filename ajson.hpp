@@ -53,7 +53,7 @@ namespace ajson
         fileds.emplace_back();
         auto& f = fileds.back();
         f.str = pre + 2;
-        f.len = cur - pre - 2;
+        f.len = len - 2;
       }
     }
 
