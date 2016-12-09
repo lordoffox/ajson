@@ -27,8 +27,8 @@ struct Person
 	vector<Education> Educations;
 };
 
-AJSON(Education,v.School , v.GPA)
-AJSON(Person, v.Name , v.Age , v.Educations)
+AJSON(Education , School , GPA)
+AJSON(Person, Name , Age , Educations)
 
 int main(int argc, char * argv[])
 {

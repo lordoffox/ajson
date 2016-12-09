@@ -12,7 +12,7 @@ struct demo
   string world;
 };
 
-AJSON(demo,v.hello,v.world);
+AJSON(demo,hello,world);
 
 int main(int argc, char * argv[])
 {
