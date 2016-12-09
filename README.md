@@ -24,7 +24,7 @@ a utility for serialize C++ and json.
 
 简介
 =====
-```
+```cpp
 ------------------------------------------------------------------
 
 struct Person
@@ -50,7 +50,7 @@ ajson::load_from_buff(obj,json);
 
 再来个复杂点的例子
 
-```
+```cpp
 enum PhoneType
 
 {
@@ -151,6 +151,7 @@ ajson反序列化扫描的时候，直接将字面量类型同时解析，并将
 AJSON完全免费，没有任何限制，使用boost的授权方式。
 
 0.2.1版本
+=====
 去掉了宏定义中的v.语法，感谢[奏之章]( https://github.com/mm304321141 )的建议
 注意：由于该改动，ajson不能使用在final修饰的class上
 
