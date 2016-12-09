@@ -48,12 +48,12 @@ namespace ajson
     inline void add_filed(char const * pre, char const * cur, filed_list& fileds)
     {
       size_t len = cur - pre;
-      if (len > 2)
+      if (len > 0)
       {
         fileds.emplace_back();
         auto& f = fileds.back();
-        f.str = pre + 2;
-        f.len = len - 2;
+        f.str = pre;
+        f.len = len;
       }
     }
 
@@ -915,7 +915,7 @@ namespace ajson
 
     inline int seekp(size_t offset, int seek_dir)
     {
-      return std::fseek(this->m_f, (long)offset, seek_dir);
+      return std::fseek(this->m_f, offset, seek_dir);
     }
 
     inline void clear()
@@ -1752,54 +1752,67 @@ namespace ajson
 }
 
 #define AJSON(TYPE,...) \
-namespace ajson{\
-template<> \
-struct json_impl < TYPE , void > \
-{ \
-  static inline detail::filed_list& this_filed_list() \
+namespace ajson\
+{\
+  template<>\
+  struct json_impl < TYPE , void >\
   {\
-    static auto fields = detail::split_fields(STRINGFY_LIST(__VA_ARGS__)); \
-    return fields; \
+    struct json_helper : public TYPE\
+    {\
+      inline void read_##TYPE(reader& rd)\
+      {\
+        auto& fields = this_filed_list();\
+        if (rd.expect('{') == false){ rd.error("read object must start with {!"); }\
+          rd.next();\
+        if (rd.expect('}'))\
+          return;\
+        auto mber = rd.peek();\
+        do\
+        {\
+          if (mber.type != token::t_string){ rd.error("object key must be string"); }\
+            rd.next();\
+          if (rd.expect(':') == false){ rd.error("invalid json document!"); }\
+            rd.next();\
+          if (read_members(rd, &fields[0], mber.str, 0,__VA_ARGS__) == 0)\
+          {\
+            skip(rd);\
+          }\
+          if (rd.expect('}'))\
+          {\
+            rd.next();\
+            return;\
+          }\
+          else if (rd.expect(','))\
+          {\
+            rd.next();\
+            mber = rd.peek();\
+            continue;\
+          }\
+          rd.error("invalid json document!");\
+        } while (true);\
+      }\
+    template<typename write_ty>\
+    inline void write_##TYPE(write_ty& wt) const\
+    {\
+      auto& fields = this_filed_list();\
+      wt.putc('{');\
+      ::ajson::write_members(wt, &fields[0], 0,__VA_ARGS__);\
+      wt.putc('}');\
+    }\
+  };\
+  static inline detail::filed_list& this_filed_list()\
+  {\
+    static auto fields = detail::split_fields(STRINGFY_LIST(__VA_ARGS__));\
+    return fields;\
   }\
-  static inline void read(reader& rd, TYPE& v) \
-  { \
-    auto& fields = this_filed_list(); \
-    if (rd.expect('{') == false){ rd.error("read object must start with {!"); } \
-    rd.next(); \
-    if (rd.expect('}')) \
-      return; \
-    auto mber = rd.peek(); \
-    do \
-    { \
-      if (mber.type != token::t_string){ rd.error("object key must be string"); } \
-      rd.next(); \
-      if (rd.expect(':') == false){ rd.error("invalid json document!"); } \
-      rd.next(); \
-      if (read_members(rd, &fields[0], mber.str, 0,__VA_ARGS__) == 0) \
-      { \
-        skip(rd); \
-      } \
-      if (rd.expect('}')) \
-      { \
-        rd.next(); \
-        return; \
-      } \
-      else if (rd.expect(',')) \
-      { \
-        rd.next(); \
-        mber = rd.peek(); \
-        continue; \
-      } \
-      rd.error("invalid json document!"); \
-    } while (true); \
-  } \
+  static inline void read(reader& rd, TYPE& v)\
+  {\
+    reinterpret_cast<json_helper &>(v).read_##TYPE(rd);\
+  }\
   template<typename write_ty>\
   static inline void write(write_ty& wt, TYPE const& v)\
   {\
-    auto& fields = this_filed_list(); \
-    wt.putc('{');\
-    ::ajson::write_members(wt, &fields[0], 0,__VA_ARGS__); \
-    wt.putc('}');\
+    reinterpret_cast<json_helper const &>(v).write_##TYPE(wt);\
   }\
 };\
 }
