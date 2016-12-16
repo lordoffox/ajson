@@ -1025,9 +1025,9 @@ namespace ajson
         if (tok.str.len == 4)
         {
           val = (ptr[0] == 't' || ptr[0] == 'T') &&
-            (ptr[0] == 'u' || ptr[0] == 'U') &&
-            (ptr[0] == 'r' || ptr[0] == 'R') &&
-            (ptr[0] == 'e' || ptr[0] == 'E');
+            (ptr[1] == 'u' || ptr[1] == 'U') &&
+            (ptr[2] == 'r' || ptr[2] == 'R') &&
+            (ptr[3] == 'e' || ptr[3] == 'E');
         }
         else
         {
