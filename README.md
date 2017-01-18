@@ -36,7 +36,7 @@ struct Person
   
 };
 
-AJSON(Person , Name , Age))
+AJSON(Person , Name , Age)
 
 Person obj;
 
