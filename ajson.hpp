@@ -1759,7 +1759,7 @@ namespace ajson\
   {\
     struct json_helper : public TYPE\
     {\
-      inline void read_##TYPE(reader& rd)\
+      inline void read_(reader& rd)\
       {\
         auto& fields = this_filed_list();\
         if (rd.expect('{') == false){ rd.error("read object must start with {!"); }\
@@ -1792,7 +1792,7 @@ namespace ajson\
         } while (true);\
       }\
     template<typename write_ty>\
-    inline void write_##TYPE(write_ty& wt) const\
+    inline void write_(write_ty& wt) const\
     {\
       auto& fields = this_filed_list();\
       wt.putc('{');\
@@ -1807,12 +1807,12 @@ namespace ajson\
   }\
   static inline void read(reader& rd, TYPE& v)\
   {\
-    reinterpret_cast<json_helper &>(v).read_##TYPE(rd);\
+    reinterpret_cast<json_helper &>(v).read_(rd);\
   }\
   template<typename write_ty>\
   static inline void write(write_ty& wt, TYPE const& v)\
   {\
-    reinterpret_cast<json_helper const &>(v).write_##TYPE(wt);\
+    reinterpret_cast<json_helper const &>(v).write_(wt);\
   }\
 };\
 }
