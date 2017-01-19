@@ -30,14 +30,7 @@ namespace ajson
       {
         if (len == rhs.len)
         {
-          for (size_t i = 0; i < len; ++i)
-          {
-            if (str[i] != rhs.str[i])
-            {
-              return false;
-            }
-          }
-          return true;
+          return std::memcmp(str, rhs.str, len) == 0;
         }
         return false;
       }
