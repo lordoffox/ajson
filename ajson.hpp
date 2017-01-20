@@ -334,6 +334,11 @@ namespace ajson
           c = read();
           switch (c)
           {
+          case '/':
+          {
+            c = '/';
+            break;
+          }
           case 'b':
           {
             c = '\b';
