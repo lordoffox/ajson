@@ -165,6 +165,7 @@ namespace ajson
       uint64_t  u64;
       double    d64;
     } value;
+    bool neg = false;
   };
 
 #ifdef _MSC_VER
@@ -600,6 +601,7 @@ namespace ajson
     {
       auto c = skip();
       bool do_next = false;
+      cur_tok_.neg = false;
       switch (c)
       {
       case 0:
@@ -681,7 +683,8 @@ namespace ajson
         else if (c == '-')
         {
           cur_tok_.type = token::t_int;
-          cur_tok_.value.u64 = '0' - c;
+          cur_tok_.value.i64 = 0;
+          cur_tok_.neg = true;
           parser_number();
         }
         else
@@ -1089,6 +1092,8 @@ namespace ajson
       case token::t_int:
       {
         val = static_cast<ty>(tok.value.i64);
+        if (tok.neg)
+          val = -val;
         break;
       }
       case token::t_uint:
@@ -1099,6 +1104,8 @@ namespace ajson
       case token::t_number:
       {
         val = static_cast<ty>(tok.value.d64);
+        if (tok.neg)
+          val = -val;
         break;
       }
       default:
@@ -1165,7 +1172,7 @@ namespace ajson
       }
       case token::t_int:
       {
-        if (tok.value.i64 < 0)
+        if (tok.value.neg)
         {
           rd.error("assign a negative signed integral to unsigned integral number.");
         }
@@ -1179,7 +1186,7 @@ namespace ajson
       }
       case token::t_number:
       {
-        if (tok.value.d64 < 0)
+        if (tok.value.neg)
         {
           rd.error("assign a negative float point to unsigned integral number.");
         }
@@ -1265,6 +1272,8 @@ namespace ajson
       case token::t_int:
       {
         val = static_cast<ty>(tok.value.i64);
+        if (tok.neg)
+          val = -val;
         break;
       }
       case token::t_uint:
@@ -1275,6 +1284,8 @@ namespace ajson
       case token::t_number:
       {
         val = static_cast<ty>(tok.value.d64);
+        if (tok.neg)
+          val = -val;
         break;
       }
       default:
