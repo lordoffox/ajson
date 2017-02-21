@@ -1172,7 +1172,7 @@ namespace ajson
       }
       case token::t_int:
       {
-        if (tok.value.neg)
+        if (tok.neg)
         {
           rd.error("assign a negative signed integral to unsigned integral number.");
         }
@@ -1186,7 +1186,7 @@ namespace ajson
       }
       case token::t_number:
       {
-        if (tok.value.neg)
+        if (tok.neg)
         {
           rd.error("assign a negative float point to unsigned integral number.");
         }
