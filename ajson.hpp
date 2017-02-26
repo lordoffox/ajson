@@ -1085,8 +1085,20 @@ namespace ajson
       {
       case token::t_string:
       {
-        int64_t temp = std::strtoll(tok.str.str, nullptr, 10);
-        val = static_cast<ty>(temp);
+        char const * ptr = tok.str.str;
+        if (tok.str.len == 4)
+        {
+          if ((ptr[0] == 't' || ptr[0] == 'T') &&
+            (ptr[1] == 'r' || ptr[1] == 'R') &&
+            (ptr[2] == 'u' || ptr[2] == 'U') &&
+            (ptr[3] == 'e' || ptr[3] == 'E'))
+            val = 1;
+        }
+        else
+        {
+          int64_t temp = std::strtoll(tok.str.str, nullptr, 10);
+          val = static_cast<ty>(temp);
+        }
         break;
       }
       case token::t_int:
@@ -1166,8 +1178,20 @@ namespace ajson
       {
       case token::t_string:
       {
-        uint64_t temp = std::strtoull(tok.str.str, nullptr, 10);
-        val = static_cast<ty>(temp);
+        char const * ptr = tok.str.str;
+        if (tok.str.len == 4)
+        {
+          if ((ptr[0] == 't' || ptr[0] == 'T') &&
+            (ptr[1] == 'r' || ptr[1] == 'R') &&
+            (ptr[2] == 'u' || ptr[2] == 'U') &&
+            (ptr[3] == 'e' || ptr[3] == 'E'))
+            val = 1;
+        }
+        else
+        {
+          uint64_t temp = std::strtoull(tok.str.str, nullptr, 10);
+          val = static_cast<ty>(temp);
+        }
         break;
       }
       case token::t_int:
