@@ -1012,6 +1012,19 @@ namespace ajson
   template<typename ty, class enable = void>
   struct json_impl;
 
+  inline bool is_true(token const& tok)
+  {
+    char const * ptr = tok.str.str;
+    if (tok.str.len == 4)
+    {
+      return (ptr[0] == 't' || ptr[0] == 'T') &&
+        (ptr[1] == 'r' || ptr[1] == 'R') &&
+        (ptr[2] == 'u' || ptr[2] == 'U') &&
+        (ptr[3] == 'e' || ptr[3] == 'E');
+    }
+    return false;
+  }
+
   template<>
   struct json_impl < bool, void >
   {
@@ -1022,18 +1035,7 @@ namespace ajson
       {
       case token::t_string:
       {
-        char const * ptr = tok.str.str;
-        if (tok.str.len == 4)
-        {
-          val = (ptr[0] == 't' || ptr[0] == 'T') &&
-            (ptr[1] == 'r' || ptr[1] == 'R') &&
-            (ptr[2] == 'u' || ptr[2] == 'U') &&
-            (ptr[3] == 'e' || ptr[3] == 'E');
-        }
-        else
-        {
-          val = false;
-        }
+        val = is_true(tok);
         break;
       }
       case token::t_int:
@@ -1085,14 +1087,9 @@ namespace ajson
       {
       case token::t_string:
       {
-        char const * ptr = tok.str.str;
-        if (tok.str.len == 4)
+        if (is_true(tok))
         {
-          if ((ptr[0] == 't' || ptr[0] == 'T') &&
-            (ptr[1] == 'r' || ptr[1] == 'R') &&
-            (ptr[2] == 'u' || ptr[2] == 'U') &&
-            (ptr[3] == 'e' || ptr[3] == 'E'))
-            val = 1;
+          val = 1;
         }
         else
         {
@@ -1178,14 +1175,9 @@ namespace ajson
       {
       case token::t_string:
       {
-        char const * ptr = tok.str.str;
-        if (tok.str.len == 4)
+        if (is_true(tok))
         {
-          if ((ptr[0] == 't' || ptr[0] == 'T') &&
-            (ptr[1] == 'r' || ptr[1] == 'R') &&
-            (ptr[2] == 'u' || ptr[2] == 'U') &&
-            (ptr[3] == 'e' || ptr[3] == 'E'))
-            val = 1;
+          val = 1;
         }
         else
         {
