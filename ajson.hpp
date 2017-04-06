@@ -1389,11 +1389,43 @@ namespace ajson
       }
       rd.next();
     }
+
+    template<typename write_ty>
+    static inline void write(write_ty& wt, const char * val)
+    {
+      wt.write_str(val, N);
+    }
+
+    template<typename write_ty>
+    static inline void write_key(write_ty& wt, const char* val)
+    {
+      write<write_ty>(wt, val);
+    }
+
   };
 
   template<size_t N>
   struct json_impl <const char[N] >
   {
+    static inline void read(reader& rd, char * val)
+    {
+      auto& tok = rd.peek();
+      if (tok.type == token::t_string)
+      {
+        size_t len = tok.str.len;
+        if (len > N)
+          len = N;
+        std::memcpy(val, tok.str.str, len);
+        if (len < N)
+          val[len] = 0;
+      }
+      else
+      {
+        rd.error("not a valid string.");
+      }
+      rd.next();
+    }
+
     template<typename write_ty>
     static inline void write(write_ty& wt, const char * val)
     {
@@ -1841,3 +1873,4 @@ namespace ajson\
   }\
 };\
 }
+
