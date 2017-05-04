@@ -36,15 +36,15 @@ namespace ajson
       }
     };
 
-    typedef ::std::vector<string_ref> filed_list;
+    typedef ::std::vector<string_ref> field_list;
 
-    inline void add_filed(char const * pre, char const * cur, filed_list& fileds)
+    inline void add_field(char const * pre, char const * cur, field_list& fields)
     {
       size_t len = cur - pre;
       if (len > 0)
       {
-        fileds.emplace_back();
-        auto& f = fileds.back();
+        fields.emplace_back();
+        auto& f = fields.back();
         f.str = pre;
         f.len = len;
       }
@@ -78,29 +78,29 @@ namespace ajson
 
     //input "v.abc,v.def,v.xyz"
     //output vector<string_ref> = ["abc","def","xyz"];
-    inline filed_list split_fields(char const * info)
+    inline field_list split_fields(char const * info)
     {
-      filed_list fileds;
+      field_list fields;
       char const * pre = info = skip_ws(info);
       while (*info != 0)
       {
         ++info;
         if (is_ws(*info))
         {
-          add_filed(pre, info, fileds);
+          add_field(pre, info, fields);
           info = skip_ws(info);
           ++info;
           pre = skip_ws(info);
         }
         else if (*info == ',')
         {
-          add_filed(pre, info, fileds);
+          add_field(pre, info, fields);
           ++info;
           pre = skip_ws(info);
         }
       }
-      add_filed(pre, info, fileds);
-      return fileds;
+      add_field(pre, info, fields);
+      return fields;
     }
 
     template< class T >
@@ -1818,7 +1818,7 @@ namespace ajson\
     {\
       inline void read_(reader& rd)\
       {\
-        auto& fields = this_filed_list();\
+        auto& fields = this_field_list();\
         if (rd.expect('{') == false){ rd.error("read object must start with {!"); }\
           rd.next();\
         if (rd.expect('}'))\
@@ -1851,13 +1851,13 @@ namespace ajson\
     template<typename write_ty>\
     inline void write_(write_ty& wt) const\
     {\
-      auto& fields = this_filed_list();\
+      auto& fields = this_field_list();\
       wt.putc('{');\
       ::ajson::write_members(wt, &fields[0], 0,__VA_ARGS__);\
       wt.putc('}');\
     }\
   };\
-  static inline detail::filed_list& this_filed_list()\
+  static inline detail::field_list& this_field_list()\
   {\
     static auto fields = detail::split_fields(STRINGFY_LIST(__VA_ARGS__));\
     return fields;\
