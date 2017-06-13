@@ -106,11 +106,11 @@ struct AddressBook
 
 };
 
-AJSON(PhoneNumber, number, type);
+AJSON(PhoneNumber, number, type)
 
-AJSON(Person, name, id, mail, phones);
+AJSON(Person, name, id, mail, phones)
 
-AJSON(AddressBook, peoples);
+AJSON(AddressBook, peoples)
 
 ```
 结构体支持嵌套，stl容器也支持嵌套。
