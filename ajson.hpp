@@ -194,6 +194,7 @@ namespace ajson
     bool    end_mark_ = false;
     char  * ptr_ = nullptr;
     double decimal = 0.1;
+    int    exp = 0;
     inline void decimal_reset(){ decimal = 0.1; }
 
     inline char read() const
@@ -482,6 +483,125 @@ namespace ajson
       } while (true);
     }
 
+    void parser_exp_pos()
+    {
+      take();
+      auto c = read();
+      do
+      {
+        switch (c)
+        {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+          exp *= 10;
+          exp += (c - '0');
+          break;
+        }
+        default:
+        {
+          for (int i = 0; i < exp; ++i)
+          {
+            cur_tok_.value.d64 *= 10.0;
+          }
+          exp = 0;
+          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          return;
+        }
+        }
+        take();
+        c = read();
+      } while (1);
+    }
+
+    void parser_exp_neg()
+    {
+      take();
+      auto c = read();
+      do
+      {
+        switch (c)
+        {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+          exp *= 10;
+          exp += (c - '0');
+          break;
+        }
+        default:
+        {
+          for (int i = 0; i < exp; ++i)
+          {
+            cur_tok_.value.d64 *= 0.1;
+          }
+          exp = 0;
+          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          return;
+        }
+        }
+        take();
+        c = read();
+      } while (1);
+    }
+
+    void parser_exp()
+    {
+      take();
+      auto c = read();
+      do
+      {
+        switch (c)
+        {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+          exp *= 10;
+          exp += (c - '0');
+          parser_exp_pos();
+          return;
+        }
+        case '-':
+        {
+          parser_exp_neg();
+          return;
+        }
+        default:
+        {
+          exp = 0;
+          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          return;
+        }
+        }
+        take();
+        c = read();
+      } while (1);
+    }
+
     void parser_number()
     {
       cur_tok_.str.str = ptr_ + cur_offset_;
@@ -538,6 +658,21 @@ namespace ajson
             error("not a valid number!");
           }
           break;
+        }
+        case 'e':
+        case 'E':
+        {
+          if (cur_tok_.type == token::t_int)
+          {
+            cur_tok_.type = token::t_number;
+            cur_tok_.value.d64 = (double)cur_tok_.value.i64;
+          }
+          else if (cur_tok_.type == token::t_uint)
+          {
+            cur_tok_.type = token::t_number;
+            cur_tok_.value.d64 = (double)cur_tok_.value.u64;
+          }
+          parser_exp();
         }
         default:
         {
