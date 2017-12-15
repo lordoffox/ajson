@@ -597,8 +597,6 @@ namespace ajson
           return;
         }
         }
-        take();
-        c = read();
       } while (1);
     }
 
