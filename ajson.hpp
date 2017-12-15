@@ -1848,8 +1848,9 @@ namespace ajson
   template<typename ty>
   inline void load_from_buff(ty& val, char * buff, size_t len = -1)
   {
+    typedef std::remove_cv<ty>::type rty;
     reader rd(buff, len);
-    json_impl<ty>::read(rd, val);
+    json_impl<rty>::read(rd, val);
   }
 
   template<typename ty>
@@ -1892,7 +1893,8 @@ namespace ajson
     std::fread(buffer, 1, sz, f);
     buffer[sz] = 0;
     reader rd(buffer, sz);
-    json_impl<ty>::read(rd, val);
+    typedef std::remove_cv<ty>::type rty;
+    json_impl<rty>::read(rd, val);
   }
 
   template<typename write_ty, typename head, typename... args>
@@ -1936,8 +1938,9 @@ namespace ajson
   template<typename ty, typename stream_ty, class write_tp = lite_write<stream_ty> >
   inline void save_to(stream_ty& ss, ty& val)
   {
+    typedef std::remove_cv<ty>::type rty;
     write_tp wt(ss);
-    json_impl<ty>::write(wt, val);
+    json_impl<rty>::write(wt, val);
   }
 
   template<typename ty, typename stream_ty = ajson_file_stream, class write_tp = lite_write<stream_ty> >
