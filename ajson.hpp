@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <deque>
 #include <list>
@@ -12,8 +14,6 @@
 #include <type_traits>
 #include <vector>
 #include <unordered_map>
-#include <stdlib.h>
-#include <cstring>
 #include <ios>
 
 #define STRINGFY_LIST(...) #__VA_ARGS__
@@ -1891,7 +1891,7 @@ namespace ajson
     std::fread(buffer, 1, sz, f);
     buffer[sz] = 0;
     reader rd(buffer, sz);
-    typedef std::remove_cv<ty>::type rty;
+    typedef typename std::remove_cv<ty>::type rty;
     json_impl<rty>::read(rd, val);
   }
 
@@ -1936,7 +1936,7 @@ namespace ajson
   template<typename ty, typename stream_ty, class write_tp = lite_write<stream_ty> >
   inline void save_to(stream_ty& ss, ty& val)
   {
-    typedef std::remove_cv<ty>::type rty;
+    typedef typename std::remove_cv<ty>::type rty;
     write_tp wt(ss);
     json_impl<rty>::write(wt, val);
   }
