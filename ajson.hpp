@@ -413,9 +413,13 @@ namespace ajson
         switch (c)
         {
         case 0:
-        case '\n':
         {
           error("not a valid string!");
+          break;
+        }
+        case '\n':
+        {
+          take();
           break;
         }
         case '\\':
