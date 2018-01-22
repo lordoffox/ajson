@@ -417,11 +417,6 @@ namespace ajson
           error("not a valid string!");
           break;
         }
-        case '\n':
-        {
-          take();
-          break;
-        }
         case '\\':
         {
           take();
@@ -470,6 +465,7 @@ namespace ajson
         case ' ':
         case '\t':
         case '\r':
+        case '\n':
         case ',':
         case '[':
         case ']':
