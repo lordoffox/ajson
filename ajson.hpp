@@ -1846,7 +1846,7 @@ namespace ajson
   template<typename ty>
   inline void load_from_buff(ty& val, char * buff, size_t len = -1)
   {
-    typedef std::remove_cv<ty>::type rty;
+    typedef typename std::remove_cv<ty>::type rty;
     reader rd(buff, len);
     json_impl<rty>::read(rd, val);
   }
@@ -1888,7 +1888,7 @@ namespace ajson
 
     char * buffer = new char[sz+1];
     buffer_guard bg(buffer);
-    std::fread(buffer, 1, sz, f);
+    sz = std::fread(buffer, 1, sz, f);
     buffer[sz] = 0;
     reader rd(buffer, sz);
     typedef typename std::remove_cv<ty>::type rty;
