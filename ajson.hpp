@@ -1890,6 +1890,14 @@ namespace ajson
     buffer_guard bg(buffer);
     sz = std::fread(buffer, 1, sz, f);
     buffer[sz] = 0;
+    if (sz >= 3)
+    {
+      if (buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+      {
+        buffer += 3;
+        sz -= 3;
+      }
+    }
     reader rd(buffer, sz);
     typedef typename std::remove_cv<ty>::type rty;
     json_impl<rty>::read(rd, val);
