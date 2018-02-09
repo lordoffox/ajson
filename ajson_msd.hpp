@@ -192,7 +192,7 @@ namespace ajson
     size_t  len_ = 0;
     size_t  cur_offset_ = 0;
     bool    end_mark_ = false;
-    const char  * ptr_ = nullptr;
+    char  * ptr_ = nullptr;
     double decimal = 0.1;
     int    exp = 0;
     inline void decimal_reset(){ decimal = 0.1; }
@@ -239,11 +239,91 @@ namespace ajson
       return c;
     }
 
+    inline void fill_escape_char(size_t count, char c)
+    {
+      if (count == 0)
+        return;
+      ptr_[cur_offset_ - count] = c;
+    }
+
+    inline char char_to_hex(char v)
+    {
+      if (v <= 'f')
+      {
+        v = detail::char_table()[v];
+      }
+      else
+      {
+        v = 16;
+      }
+      if (v > 15)
+        error("utf8 code error!");
+      return v;
+    }
+
+    inline uint64_t read_utf()
+    {
+      char v = char_to_hex(read());
+      uint64_t utf = v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      utf <<= 4;
+      take();
+      v = char_to_hex(read());
+      utf += v;
+      take();
+      return utf;
+    }
+
+    inline void esacpe_utf8(size_t& esc_count)
+    {
+      uint64_t utf1 = read_utf();
+      esc_count += 6;
+
+      if (utf1 < 0x80)
+      {
+        fill_escape_char(esc_count, (char)utf1);
+        --esc_count;
+      }
+      else if (utf1 < 0x800)
+      {
+        fill_escape_char(esc_count, (char)(0xC0 | ((utf1 >> 6) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 & 0x3F))));
+        esc_count -= 2;
+      }
+      else if (utf1 < 0x80000)
+      {
+        fill_escape_char(esc_count, (char)(0xE0 | ((utf1 >> 12) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
+        fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 & 0x3F))));
+        esc_count -= 3;
+      }
+      else
+      {
+        if (utf1 < 0x110000)
+        {
+          error("utf8 code error!");
+        }
+        fill_escape_char(esc_count, (char)(0xF0 | ((utf1 >> 18) & 0xFF)));
+        fill_escape_char(esc_count - 1, (char)(0x80 | ((utf1 >> 12) & 0x3F)));
+        fill_escape_char(esc_count - 2, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
+        fill_escape_char(esc_count - 3, (char)(0x80 | ((utf1 & 0x3F))));
+        esc_count -= 4;
+      }
+    }
+
     void parser_quote_string()
     {
       take();
       cur_tok_.str.str = ptr_ + cur_offset_;
       auto c = read();
+      size_t esc_count = 0;
       do
       {
         switch (c)
@@ -258,15 +338,65 @@ namespace ajson
         {
           take();
           c = read();
+          switch (c)
+          {
+          case '/':
+          {
+            c = '/';
+            break;
+          }
+          case 'b':
+          {
+            c = '\b';
+            break;
+          }
+          case 'f':
+          {
+            c = '\f';
+            break;
+          }
+          case 'n':
+          {
+            c = '\n';
+            break;
+          }
+          case 'r':
+          {
+            c = '\r';
+            break;
+          }
+          case 't':
+          {
+            c = '\t';
+            break;
+          }
+          case '"':
+          {
+            break;
+          }
+          case 'u':
+          {
+            take();
+            esacpe_utf8(esc_count);
+            c = read();
+            continue;
+          }
+          default:
+          {
+            error("unknown escape char!");
+          }
+          }
+          ++esc_count;
           break;
         }
         case '"':
         {
-          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
           take();
           return;
         }
         }
+        fill_escape_char(esc_count, c);
         take();
         c = read();
       } while (true);
@@ -287,6 +417,51 @@ namespace ajson
           error("not a valid string!");
           break;
         }
+        case '\\':
+        {
+          take();
+          c = read();
+          switch (c)
+          {
+          case 'b':
+          {
+            c = '\b';
+            break;
+          }
+          case 'f':
+          {
+            c = '\f';
+            break;
+          }
+          case 'n':
+          {
+            c = '\n';
+            break;
+          }
+          case 'r':
+          {
+            c = '\r';
+            break;
+          }
+          case 't':
+          {
+            c = '\t';
+            break;
+          }
+          case 'u':
+          {
+            take();
+            esacpe_utf8(esc_count);
+            continue;
+          }
+          default:
+          {
+            error("unknown escape char!");
+          }
+          }
+          ++esc_count;
+          break;
+        }
         case ' ':
         case '\t':
         case '\r':
@@ -298,10 +473,11 @@ namespace ajson
         case '{':
         case '}':
         {
-          cur_tok_.str.len = ptr_ + cur_offset_ - cur_tok_.str.str;
+          cur_tok_.str.len = ptr_ + cur_offset_ - esc_count - cur_tok_.str.str;
           return;
         }
         }
+        fill_escape_char(esc_count, c);
         take();
         c = read();
       } while (true);
@@ -507,7 +683,7 @@ namespace ajson
       } while (1);
     }
   public:
-    reader(const char * ptr = nullptr, size_t len = -1)
+    reader(char * ptr = nullptr, size_t len = -1)
       :ptr_(ptr), len_(len)
     {
       if (ptr == nullptr)
@@ -1300,152 +1476,6 @@ namespace ajson
     }
   };
 
-  inline char char_to_hex(char v)
-  {
-    if (v <= 'f')
-    {
-      v = detail::char_table()[v];
-    }
-    else
-    {
-      v = 16;
-    }
-    return v;
-  }
-
-  inline uint64_t read_utf(const char * data, size_t len)
-  {
-    char v = char_to_hex(*data++);
-    if (v >= 16)
-      return 0;
-    uint64_t utf = v;
-    utf <<= 4;
-    v = char_to_hex(*data++);
-    if (v >= 16)
-      return 0;
-    utf += v;
-    utf <<= 4;
-    v = char_to_hex(*data++);
-    if (v >= 16)
-      return 0;
-    utf += v;
-    utf <<= 4;
-    v = char_to_hex(*data++);
-    if (v >= 16)
-      return 0;
-    utf += v;
-    return utf;
-  }
-
-  template<typename string_ty>
-  inline bool esacpe_utf8(string_ty& str , uint64_t utf1)
-  {
-    if (utf1 < 0x80)
-    {
-      str.append(1, (char)utf1);
-    }
-    else if (utf1 < 0x800)
-    {
-      str.append(1, (char)(0xC0 | ((utf1 >> 6) & 0xFF)));
-      str.append(1, (char)(0x80 | ((utf1 & 0x3F))));
-    }
-    else if (utf1 < 0x80000)
-    {
-      str.append(1, (char)(0xE0 | ((utf1 >> 12) & 0xFF)));
-      str.append(1, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
-      str.append(1, (char)(0x80 | ((utf1 & 0x3F))));
-    }
-    else
-    {
-      if (utf1 < 0x110000)
-      {
-        return false;
-      }
-      str.append(1, (char)(0xF0 | ((utf1 >> 18) & 0xFF)));
-      str.append(1, (char)(0x80 | ((utf1 >> 12) & 0x3F)));
-      str.append(1, (char)(0x80 | ((utf1 >> 6) & 0x3F)));
-      str.append(1, (char)(0x80 | ((utf1 & 0x3F))));
-    }
-    return true;
-  }
-
-  template<typename string_ty>
-  bool escape_string(string_ty& str , const char * data , int32_t len)
-  {
-    str.clear();
-    str.reserve(len);
-    do
-    {
-      auto c = *data++;
-      --len;
-      switch (c)
-      {
-      case '\\':
-      {
-        c = *data++;
-        --len;
-        switch (c)
-        {
-        case '\\':
-        {
-          c = '\\';
-          break;
-        }
-        case 'b':
-        {
-          c = '\b';
-          break;
-        }
-        case 'f':
-        {
-          c = '\f';
-          break;
-        }
-        case 'n':
-        {
-          c = '\n';
-          break;
-        }
-        case 'r':
-        {
-          c = '\r';
-          break;
-        }
-        case 't':
-        {
-          c = '\t';
-          break;
-        }
-        case '"':
-        {
-          break;
-        }
-        case 'u':
-        {
-          if (len < 4)
-            return false;
-          uint64_t uft1 = read_utf(data, len);
-          data += 4;
-          len -= 4;
-          if (uft1 == 0)
-            return false;
-          if (!esacpe_utf8(str, uft1))
-            return false;
-          continue;
-        }
-        default:
-        {
-          return false;
-        }
-        }
-        break;
-      }
-      }
-      str.append(1, c);
-    } while (len > 0);
-    return true;
-  }
-  
   template<typename ty>
   struct json_impl < ty,
     typename std::enable_if <detail::is_stdstring<ty>::value>::type >
@@ -1455,10 +1485,7 @@ namespace ajson
       auto& tok = rd.peek();
       if (tok.type == token::t_string)
       {
-        if (!escape_string(val, tok.str.str, tok.str.len))
-        {
-          rd.error("not a valid string.");
-        }
+        val.assign(tok.str.str, tok.str.len);
       }
       else
       {
@@ -1487,15 +1514,10 @@ namespace ajson
       auto& tok = rd.peek();
       if (tok.type == token::t_string)
       {
-        std::string str;
-        if (!escape_string(str, tok.str.str, tok.str.len))
-        {
-          rd.error("not a valid string.");
-        }
-        size_t len = str.length();
+        size_t len = tok.str.len;
         if (len > N)
           len = N;
-        std::memcpy(val, str.data(), len);
+        std::memcpy(val, tok.str.str, len);
         if (len < N)
           val[len] = 0;
       }
@@ -1822,7 +1844,7 @@ namespace ajson
   }
 
   template<typename ty>
-  inline void load_from_buff(ty& val, const char * buff, size_t len = -1)
+  inline void load_from_buff(ty& val, char * buff, size_t len = -1)
   {
     typedef typename std::remove_cv<ty>::type rty;
     reader rd(buff, len);
