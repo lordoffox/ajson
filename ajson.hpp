@@ -878,7 +878,7 @@ namespace ajson
 
     inline int seekp(size_t offset, int seek_dir)
     {
-      return std::fseek(this->m_f, offset, seek_dir);
+      return std::fseek(this->m_f, (int)offset, seek_dir);
     }
 
     inline void clear()
@@ -1455,7 +1455,7 @@ namespace ajson
       auto& tok = rd.peek();
       if (tok.type == token::t_string)
       {
-        if (!escape_string(val, tok.str.str, tok.str.len))
+        if (!escape_string(val, tok.str.str, (int)tok.str.len))
         {
           rd.error("not a valid string.");
         }
