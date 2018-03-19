@@ -345,6 +345,11 @@ namespace ajson
             c = '\\';
             break;
           }
+          case '/':
+          {
+            c = '/';
+            break;
+          }
           case 'b':
           {
             c = '\b';
