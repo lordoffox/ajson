@@ -1370,7 +1370,7 @@ namespace ajson
   }
 
   template<typename string_ty>
-  bool escape_string(string_ty& str , const char * data , int32_t len)
+  bool escape_string(string_ty& str , const char * data , size_t len)
   {
     str.clear();
     str.reserve(len);
@@ -1559,6 +1559,111 @@ namespace ajson
       write<write_ty>(wt, val);
     }
   };
+
+  template<typename T, size_t N>
+  struct json_impl <T[N]>
+  {
+    static inline void read(reader& rd, T * val)
+    {
+      if (rd.expect('[') == false)
+      {
+        rd.error("array must start with [.");
+      }
+      rd.next();
+      auto tok = &rd.peek();
+      size_t count = 0;
+      while (tok->str.str[0] != ']')
+      {
+        if (count < N)
+        {
+          json_impl<T>::read(rd, val[count]);
+        }
+        ++count;
+        tok = &rd.peek();
+        if (tok->str.str[0] == ',')
+        {
+          rd.next();
+          tok = &rd.peek();
+          continue;
+        }
+        else if (tok->str.str[0] == ']')
+        {
+          break;
+        }
+        else
+        {
+          rd.error("no valid array!");
+        }
+      }
+      rd.next();
+      return;
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, const T * val)
+    {
+      wt.putc('[');
+      for (auto& i : val)
+      {
+        json_impl<typename ty::value_type>::write(wt, i);
+        if (sz-- > 1)
+          wt.putc(',');
+      }
+      wt.putc(']');
+    }
+  };
+
+  template<typename T, size_t N>
+  struct json_impl < const T[N]>
+  {
+    static inline void read(reader& rd, T * val)
+    {
+      if (rd.expect('[') == false)
+      {
+        rd.error("array must start with [.");
+      }
+      rd.next();
+      auto tok = &rd.peek();
+      size_t count = 0;
+      while (tok->str.str[0] != ']')
+      {
+        if (count < N)
+        {
+          json_impl<T>::read(rd, val[count]);
+        }
+        ++count;
+        tok = &rd.peek();
+        if (tok->str.str[0] == ',')
+        {
+          rd.next();
+          tok = &rd.peek();
+          continue;
+        }
+        else if (tok->str.str[0] == ']')
+        {
+          break;
+        }
+        else
+        {
+          rd.error("no valid array!");
+        }
+      }
+      rd.next();
+      return;
+    }
+    template<typename write_ty>
+    static inline void write(write_ty& wt, const T * val)
+    {
+      wt.putc('[');
+      for (auto& i : val)
+      {
+        json_impl<typename ty::value_type>::write(wt, i);
+        if (sz-- > 1)
+          wt.putc(',');
+      }
+      wt.putc(']');
+    }
+  };
+
 
   template<typename ty>
   inline typename std::enable_if <detail::is_emplace_back_able<ty>::value, void>::type
