@@ -1057,7 +1057,7 @@ namespace ajson
 
     inline bool bad(){ return m_status != good; }
 
-    inline int seekp(size_t offset, int seek_dir)
+    inline int seekp(int offset, int seek_dir)
     {
       return std::fseek(this->m_f, offset, seek_dir);
     }
@@ -1511,40 +1511,44 @@ namespace ajson
     }
   };
 
+  inline void char_array_read(reader& rd, char * val, int N)
+  {
+    auto& tok = rd.peek();
+    if (tok.type == token::t_string)
+    {
+      size_t len = tok.str.len;
+      if (len > N)
+        len = N;
+      std::memcpy(val, tok.str.str, len);
+      if (len < N)
+        val[len] = 0;
+    }
+    else
+    {
+      rd.error("not a valid string.");
+    }
+    rd.next();
+  }
+
+  template<typename write_ty>
+  inline void char_array_write(write_ty& wt, const char * val, int N)
+  {
+    wt.write_str(val, N);
+  }
+
   template<size_t N>
   struct json_impl <char[N]>
   {
     static inline void read(reader& rd, char * val)
     {
-      auto& tok = rd.peek();
-      if (tok.type == token::t_string)
-      {
-        size_t len = tok.str.len;
-        if (len > N)
-          len = N;
-        std::memcpy(val, tok.str.str, len);
-        if (len < N)
-          val[len] = 0;
-      }
-      else
-      {
-        rd.error("not a valid string.");
-      }
-      rd.next();
+      char_array_read(rd, val, N);
     }
 
     template<typename write_ty>
     static inline void write(write_ty& wt, const char * val)
     {
-      wt.write_str(val, N);
+      char_array_write(wt, val, N);
     }
-
-    template<typename write_ty>
-    static inline void write_key(write_ty& wt, const char* val)
-    {
-      write<write_ty>(wt, val);
-    }
-
   };
 
   template<size_t N>
@@ -1552,85 +1556,82 @@ namespace ajson
   {
     static inline void read(reader& rd, char * val)
     {
-      auto& tok = rd.peek();
-      if (tok.type == token::t_string)
-      {
-        size_t len = tok.str.len;
-        if (len > N)
-          len = N;
-        std::memcpy(val, tok.str.str, len);
-        if (len < N)
-          val[len] = 0;
-      }
-      else
-      {
-        rd.error("not a valid string.");
-      }
-      rd.next();
+      char_array_read(rd, val, N);
     }
 
     template<typename write_ty>
     static inline void write(write_ty& wt, const char * val)
     {
-      wt.write_str(val, N);
-    }
-
-    template<typename write_ty>
-    static inline void write_key(write_ty& wt, const char* val)
-    {
-      write<write_ty>(wt, val);
+      char_array_write(wt, val, N);
     }
   };
+
+  template<typename T>
+  inline void array_read(reader& rd, T * val, int N)
+  {
+    if (rd.expect('[') == false)
+    {
+      rd.error("array must start with [.");
+    }
+    rd.next();
+    auto tok = &rd.peek();
+    size_t count = 0;
+    while (tok->str.str[0] != ']')
+    {
+      if (count < N)
+      {
+        json_impl<T>::read(rd, val[count]);
+      }
+      else
+      {
+        rd.error("array overflow.");
+      }
+      ++count;
+      tok = &rd.peek();
+      if (tok->str.str[0] == ',')
+      {
+        rd.next();
+        tok = &rd.peek();
+        continue;
+      }
+      else if (tok->str.str[0] == ']')
+      {
+        break;
+      }
+      else
+      {
+        rd.error("no valid array!");
+      }
+    }
+    rd.next();
+    return;
+  }
+
+  template<typename T, typename write_ty>
+  inline void array_write(write_ty& wt, const T * val, int N)
+  {
+    wt.putc('[');
+    int last = N - 1;
+    for (int i = 0; i < N; ++i)
+    {
+      json_impl<T>::write(wt, val[i]);
+      if (i < last)
+        wt.putc(',');
+    }
+    wt.putc(']');
+  }
 
   template<typename T, size_t N>
   struct json_impl <T[N]>
   {
     static inline void read(reader& rd, T * val)
     {
-      if (rd.expect('[') == false)
-      {
-        rd.error("array must start with [.");
-      }
-      rd.next();
-      auto tok = &rd.peek();
-      size_t count = 0;
-      while (tok->str.str[0] != ']')
-      {
-        if (count < N)
-        {
-          json_impl<T>::read(rd, val[count]);
-        }
-        ++count;
-        tok = &rd.peek();
-        if (tok->str.str[0] == ',')
-        {
-          rd.next();
-          tok = &rd.peek();
-          continue;
-        }
-        else if (tok->str.str[0] == ']')
-        {
-          break;
-        }
-        else
-        {
-          rd.error("no valid array!");
-        }
-      }
-      rd.next();
-      return;
+      array_read(rd, val, N);
     }
     template<typename write_ty>
     static inline void write(write_ty& wt, const T * val)
     {
-      wt.putc('[');
-      for (auto& i : val)
-      {
-        json_impl<typename ty::value_type>::write(wt, i);
-        if (sz-- > 1)
-          wt.putc(',');
-      }
-      wt.putc(']');
+      array_write(wt, val, N);
     }
   };
 
@@ -1639,50 +1640,12 @@ namespace ajson
   {
     static inline void read(reader& rd, T * val)
     {
-      if (rd.expect('[') == false)
-      {
-        rd.error("array must start with [.");
-      }
-      rd.next();
-      auto tok = &rd.peek();
-      size_t count = 0;
-      while (tok->str.str[0] != ']')
-      {
-        if (count < N)
-        {
-          json_impl<T>::read(rd, val[count]);
-        }
-        ++count;
-        tok = &rd.peek();
-        if (tok->str.str[0] == ',')
-        {
-          rd.next();
-          tok = &rd.peek();
-          continue;
-        }
-        else if (tok->str.str[0] == ']')
-        {
-          break;
-        }
-        else
-        {
-          rd.error("no valid array!");
-        }
-      }
-      rd.next();
-      return;
+      array_read(rd, val, N);
     }
     template<typename write_ty>
     static inline void write(write_ty& wt, const T * val)
     {
-      wt.putc('[');
-      for (auto& i : val)
-      {
-        json_impl<typename ty::value_type>::write(wt, i);
-        if (sz-- > 1)
-          wt.putc(',');
-      }
-      wt.putc(']');
+      array_write(wt, val, N);
     }
   };
 
