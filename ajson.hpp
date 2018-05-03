@@ -1,5 +1,22 @@
 #pragma once
 
+/*
+__ _____ _____ _____
+__|  |   __|     |   | |  JSON for ORM C++ struct
+|  |  |__   |  |  | | | |  version 0.2.2
+|_____|_____|_____|_|___|  https://github.com/lordoffox/ajson
+Licensed under the boost 1.0 License
+Copyright (c) 2013-2018 Evan
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+*/
+
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
