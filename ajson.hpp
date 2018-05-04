@@ -1391,6 +1391,8 @@ namespace ajson
   {
     str.clear();
     str.reserve(len);
+    if (len == 0)
+      return true;
     do
     {
       auto c = *data++;
