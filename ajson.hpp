@@ -972,9 +972,7 @@ namespace ajson
         ++ptr;
         decode(state, codepoint, (uint8_t)c);
 
-        switch (state)
-        {
-        case 0:
+        if (state== 0)
         {
           switch (codepoint)
           {
@@ -1065,18 +1063,6 @@ namespace ajson
             break;
           }
           }
-          break;
-        }
-        case 1:
-        {
-          //error
-          break;
-        }
-        default:
-        {
-          //putc(c);
-          break;
-        }
         }
       }
       putc('"');
