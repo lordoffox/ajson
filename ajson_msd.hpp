@@ -1104,63 +1104,163 @@ namespace ajson
       s_.write(str, len);
     }
 
+    inline uint8_t decode(uint8_t& state, uint32_t& codep, const uint8_t byte)
+    {
+      static const std::array<uint8_t, 400> utf8d =
+      {
+        {
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 00..1F
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20..3F
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 40..5F
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 60..7F
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, // 80..9F
+          7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, // A0..BF
+          8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // C0..DF
+          0xA, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x3, 0x4, 0x3, 0x3, // E0..EF
+          0xB, 0x6, 0x6, 0x6, 0x5, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, 0x8, // F0..FF
+          0x0, 0x1, 0x2, 0x3, 0x5, 0x8, 0x7, 0x1, 0x1, 0x1, 0x4, 0x6, 0x1, 0x1, 0x1, 0x1, // s0..s0
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, // s1..s2
+          1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, // s3..s4
+          1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 1, 1, // s5..s6
+          1, 3, 1, 1, 1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 // s7..s8
+        }
+      };
+
+      const uint8_t type = utf8d[byte];
+
+      codep = (state != 0)
+        ? (byte & 0x3fu) | (codep << 6)
+        : static_cast<uint32_t>(0xff >> type) & (byte);
+
+      state = utf8d[256u + state * 16u + type];
+      return state;
+    }
+
     inline void write_str(char const * str, size_t len)
     {
       static char const * hex_table = "0123456789ABCDEF";
-      static char const escape[256] = {
-#define Z16 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        //0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
-        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'b', 't', 'n', 'u', 'f', 'r', 'u', 'u', // 00
-        'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', 'u', // 10
-        0, 0, '"', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20
-        Z16, Z16,																		// 30~4F
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '\\', 0, 0, 0, // 50
-        Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16, Z16								// 60~FF
-#undef Z16
-      };
 
-      s_.putc('"');
+      putc('"');
       char const * ptr = str;
       char const * end = ptr + len;
+      uint32_t codepoint;
+      uint8_t state = 0;
       while (ptr < end)
       {
-        const char c = *ptr;
-        if(c==0)
+        char c = *ptr;
+        if (c == 0)
           break;
         ++ptr;
-        if (escape[(unsigned char)c])
+        decode(state, codepoint, (uint8_t)c);
+
+        switch (state)
         {
-          char buff[6] = { '\\', '0' };
-          size_t len = 2;
-          buff[1] = escape[(unsigned char)c];
-          if (buff[1] == 'u')
+        case 0:
+        {
+          switch (codepoint)
           {
-            if(ptr < end)
+          case 0x08: // backspace
+          {
+            putc('\\');
+            putc('b');
+            break;
+          }
+          case 0x09: // horizontal tab
+          {
+            putc('\\');
+            putc('t');
+            break;
+          }
+          case 0x0A: // newline
+          {
+            putc('\\');
+            putc('n');
+            break;
+          }
+          case 0x0C: // formfeed
+          {
+            putc('\\');
+            putc('f');
+            break;
+          }
+          case 0x0D: // carriage return
+          {
+            putc('\\');
+            putc('r');
+            break;
+          }
+          case 0x22: // quotation mark
+          {
+            putc('\\');
+            putc('\"');
+            break;
+          }
+          case 0x5C: // reverse solidus
+          {
+            putc('\\');
+            putc('\\');
+            break;
+          }
+          default:
+          {
+            // escape control characters (0x00..0x1F) or, if
+            // ensure_ascii parameter is used, non-ASCII characters
+            if ((codepoint <= 0x1F) || (codepoint >= 0x7F))
             {
-              buff[2] = (hex_table[((unsigned char)c) >> 4]);
-              buff[3] = (hex_table[((unsigned char)c) & 0xF]);
-              const char c1 = *ptr;
-              ++ptr;
-              buff[4] = (hex_table[((unsigned char)c1) >> 4]);
-              buff[5] = (hex_table[((unsigned char)c1) & 0xF]);
+              if (codepoint <= 0xFFFF)
+              {
+                unsigned char c1 = (uint8_t)(codepoint >> 8);
+                unsigned char c2 = (uint8_t)codepoint;
+                putc('\\');
+                putc('u');
+                putc(hex_table[(c1) >> 4]);
+                putc(hex_table[(c1)& 0xF]);
+                putc(hex_table[(c2) >> 4]);
+                putc(hex_table[(c2)& 0xF]);
+              }
+              else
+              {
+                unsigned char c1 = (uint8_t)(codepoint >> 24);
+                unsigned char c2 = (uint8_t)(codepoint >> 16);
+                unsigned char c3 = (uint8_t)(codepoint >> 8);
+                unsigned char c4 = (uint8_t)codepoint;
+
+                putc('\\');
+                putc('u');
+                putc(hex_table[(c1) >> 4]);
+                putc(hex_table[(c1)& 0xF]);
+                putc(hex_table[(c2) >> 4]);
+                putc(hex_table[(c2)& 0xF]);
+                putc('\\');
+                putc('u');
+                putc(hex_table[(c3) >> 4]);
+                putc(hex_table[(c3)& 0xF]);
+                putc(hex_table[(c4) >> 4]);
+                putc(hex_table[(c4)& 0xF]);
+              }
             }
             else
             {
-              buff[2] = '0';
-              buff[3] = '0';
-              buff[4] = (hex_table[((unsigned char)c) >> 4]);
-              buff[5] = (hex_table[((unsigned char)c) & 0xF]);
+              putc(c);
             }
-            len = 6;
+            break;
           }
-          s_.write(buff, len);
+          }
+          break;
         }
-        else
+        case 1:
         {
-          s_.putc(c);
+          //error
+          break;
+        }
+        default:
+        {
+          //putc(c);
+          break;
+        }
         }
       }
-      s_.putc('"');
+      putc('"');
     }
 
     inline void putc(char c)
