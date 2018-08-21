@@ -1614,7 +1614,7 @@ namespace ajson
     }
   };
 
-  inline void char_array_read(reader& rd, char * val, int N)
+  inline void char_array_read(reader& rd, char * val, size_t N)
   {
     auto& tok = rd.peek();
     if (tok.type == token::t_string)
@@ -1634,7 +1634,7 @@ namespace ajson
   }
 
   template<typename write_ty>
-  inline void char_array_write(write_ty& wt, const char * val, int N)
+  inline void char_array_write(write_ty& wt, const char * val, size_t N)
   {
     wt.write_str(val, N);
   }
@@ -2047,7 +2047,7 @@ namespace ajson
     }
     file_guard fg(f);
     std::fseek(f, 0, SEEK_END);
-    auto sz = std::ftell(f);
+    size_t sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
 
     struct buffer_guard
