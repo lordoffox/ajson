@@ -17,6 +17,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -294,7 +295,6 @@ namespace ajson
       cur_tok_.str.str = ptr_ + cur_offset_;
       take();
       auto c = read();
-      size_t esc_count = 0;
       do
       {
         switch (c)
@@ -1416,7 +1416,7 @@ namespace ajson
     return v;
   }
 
-  inline uint64_t read_utf(const char * data, size_t len)
+  inline uint64_t read_utf(const char * data, size_t)
   {
     char v = char_to_hex(*data++);
     if (v >= 16)
