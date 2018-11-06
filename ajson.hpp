@@ -753,7 +753,7 @@ namespace ajson
       return len;
     }
 
-    inline void putc(char c)
+    inline void put(char c)
     {
       std::size_t writed_len = this->m_write_ptr + 1 - this->m_header_ptr;
       if (writed_len > this->m_length)
@@ -886,7 +886,7 @@ namespace ajson
       return wlen;
     }
 
-    inline void putc(char c)
+    inline void put(char c)
     {
       std::fputc(c, this->m_f);
     }
@@ -913,9 +913,9 @@ namespace ajson
     inline void write_bool(bool v)
     {
       if (v)
-        s_.putc('1');
+        s_.put('1');
       else
-        s_.putc('0');
+        s_.put('0');
     }
 
     inline void write_liter(char const * str, size_t len)
@@ -959,7 +959,8 @@ namespace ajson
     {
       static char const * hex_table = "0123456789ABCDEF";
 
-      putc('"');
+      put('"');
+      put('"');
       char const * ptr = str;
       char const * end = ptr + len;
       uint32_t codepoint;
@@ -978,44 +979,44 @@ namespace ajson
           {
           case 0x08: // backspace
           {
-            putc('\\');
-            putc('b');
+            put('\\');
+            put('b');
             break;
           }
           case 0x09: // horizontal tab
           {
-            putc('\\');
-            putc('t');
+            put('\\');
+            put('t');
             break;
           }
           case 0x0A: // newline
           {
-            putc('\\');
-            putc('n');
+            put('\\');
+            put('n');
             break;
           }
           case 0x0C: // formfeed
           {
-            putc('\\');
-            putc('f');
+            put('\\');
+            put('f');
             break;
           }
           case 0x0D: // carriage return
           {
-            putc('\\');
-            putc('r');
+            put('\\');
+            put('r');
             break;
           }
           case 0x22: // quotation mark
           {
-            putc('\\');
-            putc('\"');
+            put('\\');
+            put('\"');
             break;
           }
           case 0x5C: // reverse solidus
           {
-            putc('\\');
-            putc('\\');
+            put('\\');
+            put('\\');
             break;
           }
           default:
@@ -1028,12 +1029,12 @@ namespace ajson
               {
                 unsigned char c1 = (uint8_t)(codepoint >> 8);
                 unsigned char c2 = (uint8_t)codepoint;
-                putc('\\');
-                putc('u');
-                putc(hex_table[(c1) >> 4]);
-                putc(hex_table[(c1) & 0xF]);
-                putc(hex_table[(c2) >> 4]);
-                putc(hex_table[(c2) & 0xF]);
+                put('\\');
+                put('u');
+                put(hex_table[(c1) >> 4]);
+                put(hex_table[(c1) & 0xF]);
+                put(hex_table[(c2) >> 4]);
+                put(hex_table[(c2) & 0xF]);
               }
               else
               {
@@ -1042,35 +1043,35 @@ namespace ajson
                 unsigned char c3 = (uint8_t)(codepoint >> 8);
                 unsigned char c4 = (uint8_t)codepoint;
 
-                putc('\\');
-                putc('u');
-                putc(hex_table[(c1) >> 4]);
-                putc(hex_table[(c1)& 0xF]);
-                putc(hex_table[(c2) >> 4]);
-                putc(hex_table[(c2)& 0xF]);
-                putc('\\');
-                putc('u');
-                putc(hex_table[(c3) >> 4]);
-                putc(hex_table[(c3)& 0xF]);
-                putc(hex_table[(c4) >> 4]);
-                putc(hex_table[(c4)& 0xF]);
+                put('\\');
+                put('u');
+                put(hex_table[(c1) >> 4]);
+                put(hex_table[(c1)& 0xF]);
+                put(hex_table[(c2) >> 4]);
+                put(hex_table[(c2)& 0xF]);
+                put('\\');
+                put('u');
+                put(hex_table[(c3) >> 4]);
+                put(hex_table[(c3)& 0xF]);
+                put(hex_table[(c4) >> 4]);
+                put(hex_table[(c4)& 0xF]);
               }
             }
             else
             {
-              putc(c);
+              put(c);
             }
             break;
           }
           }
         }
       }
-      putc('"');
+      put('"');
     }
 
-    inline void putc(char c)
+    inline void put(char c)
     {
-      s_.putc(c);
+      s_.put(c);
     }
   };
 
@@ -1135,9 +1136,9 @@ namespace ajson
     template<typename write_ty>
     static inline void write_key(write_ty& wt, bool const& val)
     {
-      wt.putc('"');
+      wt.put('"');
       wt.write_bool(val);
-      wt.putc('"');
+      wt.put('"');
     }
   };
 
@@ -1223,9 +1224,9 @@ namespace ajson
     template<typename write_ty>
     static inline void write_key(write_ty& wt, ty const& val)
     {
-      wt.putc('"');
+      wt.put('"');
       write<write_ty>(wt, val);
-      wt.putc('"');
+      wt.put('"');
     }
   };
 
@@ -1305,9 +1306,9 @@ namespace ajson
     template<typename write_ty>
     static inline void write_key(write_ty& wt, ty const& val)
     {
-      wt.putc('"');
+      wt.put('"');
       write<write_ty>(wt, val);
-      wt.putc('"');
+      wt.put('"');
     }
   };
 
@@ -1397,9 +1398,9 @@ namespace ajson
     template<typename write_ty>
     static inline void write_key(write_ty& wt, ty const& val)
     {
-      wt.putc('"');
+      wt.put('"');
       write<write_ty>(wt, val);
-      wt.putc('"');
+      wt.put('"');
     }
   };
 
@@ -1693,15 +1694,15 @@ namespace ajson
   template<typename T, typename write_ty>
   inline void array_write(write_ty& wt, const T * val, int N)
   {
-    wt.putc('[');
+    wt.put('[');
     int last = N - 1;
     for (int i = 0; i < N; ++i)
     {
       json_impl<T>::write(wt, val[i]);
       if (i < last)
-        wt.putc(',');
+        wt.put(',');
     }
-    wt.putc(']');
+    wt.put(']');
   }
 
   template<typename T, size_t N>
@@ -1784,15 +1785,15 @@ namespace ajson
     template<typename write_ty>
     static inline void write(write_ty& wt, ty const& val)
     {
-      wt.putc('[');
+      wt.put('[');
       auto sz = val.size();
       for (auto& i : val)
       {
         json_impl<typename ty::value_type>::write(wt, i);
         if (sz-- > 1)
-          wt.putc(',');
+          wt.put(',');
       }
-      wt.putc(']');
+      wt.put(']');
     }
   };
 
@@ -1842,17 +1843,17 @@ namespace ajson
     template<typename write_ty>
     static inline void write(write_ty& wt, ty const& val)
     {
-      wt.putc('{');
+      wt.put('{');
       auto sz = val.size();
       for (auto& i : val)
       {
         json_impl<typename ty::key_type>::write_key(wt, i.first);
-        wt.putc(':');
+        wt.put(':');
         json_impl<typename ty::mapped_type>::write(wt, i.second);
         if (sz-- > 1)
-          wt.putc(',');
+          wt.put(',');
       }
-      wt.putc('}');
+      wt.put('}');
     }
   };
 
@@ -2072,11 +2073,11 @@ namespace ajson
       size_t pos, head const& val, args const& ... args_)
     {
       wt.write_str(member_ptr[pos].str, member_ptr[pos].len);
-      wt.putc(':');
+      wt.put(':');
       json_impl<head>::write(wt, val);
       if (sizeof...(args))
       {
-        wt.putc(',');
+        wt.put(',');
         write_members(wt, member_ptr, pos + 1, args_...);
       }
     }
@@ -2156,9 +2157,9 @@ namespace ajson\
     inline void write_(write_ty& wt) const\
     {\
       auto& fields = this_field_list();\
-      wt.putc('{');\
+      wt.put('{');\
       ::ajson::write_members(wt, &fields[0], 0,__VA_ARGS__);\
-      wt.putc('}');\
+      wt.put('}');\
     }\
   };\
   static inline detail::field_list& this_field_list()\
