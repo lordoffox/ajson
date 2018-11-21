@@ -83,7 +83,7 @@ namespace ajson
 
     inline bool is_ws(char c)
     {
-      if (c > ' ')
+      if (c > ' ' || c <= 0)
         return false;
       return char_table()[c] == 17;
     }
@@ -1406,7 +1406,7 @@ namespace ajson
 
   inline char char_to_hex(char v)
   {
-    if (v <= 'f')
+    if (v>=0 && v <= 'f')
     {
       v = detail::char_table()[v];
     }
