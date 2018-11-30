@@ -960,7 +960,6 @@ namespace ajson
       static char const * hex_table = "0123456789ABCDEF";
 
       put('"');
-      put('"');
       char const * ptr = str;
       char const * end = ptr + len;
       uint32_t codepoint;
